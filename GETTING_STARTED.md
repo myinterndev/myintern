@@ -12,7 +12,7 @@ I've set up the **foundation** for MyIntern as an open-source product:
 - [x] TypeScript configuration
 - [x] Project structure
 - [x] CLI framework (commander)
-- [x] GitHub repo ready: https://github.com/mjags/myintern
+- [x] GitHub repo ready: https://github.com/myinterndev/myintern
 
 ### 🚧 What's Next (Implementation)
 
