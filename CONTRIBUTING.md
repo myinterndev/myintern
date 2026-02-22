@@ -10,7 +10,7 @@ Be respectful, inclusive, and professional. We're all here to build something us
 
 ### Reporting Bugs
 
-1. Check if the bug has already been reported in [Issues](https://github.com/mjags/myintern/issues)
+1. Check if the bug has already been reported in [Issues](https://github.com/myinterndev/myintern/issues)
 2. If not, create a new issue with:
    - Clear title
    - Steps to reproduce
@@ -19,7 +19,7 @@ Be respectful, inclusive, and professional. We're all here to build something us
 
 ### Suggesting Features
 
-1. Check [Issues](https://github.com/mjags/myintern/issues) for existing feature requests
+1. Check [Issues](https://github.com/myinterndev/myintern/issues) for existing feature requests
 2. Create a new issue with:
    - Clear description of the feature
    - Use case / problem it solves
@@ -29,7 +29,7 @@ Be respectful, inclusive, and professional. We're all here to build something us
 
 1. **Fork the repository**
    ```bash
-   git clone https://github.com/mjags/myintern.git
+   git clone https://github.com/myinterndev/myintern.git
    cd myintern
    ```
 
@@ -83,7 +83,7 @@ Be respectful, inclusive, and professional. We're all here to build something us
 
 ```bash
 # Clone repo
-git clone https://github.com/mjags/myintern.git
+git clone https://github.com/myinterndev/myintern.git
 cd myintern
 
 # Install dependencies
@@ -186,7 +186,7 @@ async generateCode(spec: string): Promise<GeneratedCode> {
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/mjags/myintern/discussions)
+- Open a [Discussion](https://github.com/myinterndev/myintern/discussions)
 - Join our [Discord](https://discord.gg/myintern)
 - Email: support@myintern.dev
 

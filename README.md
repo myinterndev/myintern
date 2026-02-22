@@ -49,7 +49,7 @@ MyIntern is an autonomous AI agent that acts like a **junior software engineer**
 npm install -g myintern
 
 # Or clone and build from source
-git clone https://github.com/mjags/myintern.git
+git clone https://github.com/myinterndev/myintern.git
 cd myintern
 npm install
 npm run build
@@ -371,7 +371,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Support
 
 - **Documentation:** [docs.myintern.dev](https://docs.myintern.dev)
-- **GitHub Issues:** [github.com/mjags/myintern/issues](https://github.com/mjags/myintern/issues)
+- **GitHub Issues:** [github.com/myinterndev/myintern/issues](https://github.com/myinterndev/myintern/issues)
 - **Discord:** [discord.gg/myintern](https://discord.gg/myintern)
 
 ---
