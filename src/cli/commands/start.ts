@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import { CodeAgent } from '../../agents/CodeAgent';
-import { ConfigManager } from '../../core/Config';
+import { ConfigManager } from '../../core/ConfigManager';
 
 export async function startCommand(options?: { agent?: string; foreground?: boolean }) {
-  console.log(chalk.blue.bold('\n🚀 Starting MyIntern agents...\n'));
+  console.log(chalk.blue.bold('\n🚀 Starting MyIntern Agent (Java/Spring Boot)\n'));
 
   // Check if initialized
   const configManager = new ConfigManager();
@@ -14,16 +14,6 @@ export async function startCommand(options?: { agent?: string; foreground?: bool
   }
 
   try {
-    // Load configuration
-    const config = configManager.load();
-
-    // Verify API key
-    if (!config.ai.apiKey) {
-      console.log(chalk.red('❌ API key not configured'));
-      console.log(chalk.gray('   Run: myintern config set ai.apiKey YOUR_KEY\n'));
-      return;
-    }
-
     // Start Code Agent
     const codeAgent = new CodeAgent();
     await codeAgent.start();

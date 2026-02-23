@@ -35,3 +35,8 @@ coverage/
 # Logs
 logs/
 *.log
+
+
+*.md
+
+./claude

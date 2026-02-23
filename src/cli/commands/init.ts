@@ -2,13 +2,15 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ConfigManager, MyInternConfig } from '../../core/Config';
+import { ConfigManager, AgentConfig, SUPPORTED_MODELS } from '../../core/ConfigManager';
 
 export async function initCommand() {
-  console.log(chalk.blue.bold('\n🚀 Initializing MyIntern in your project...\n'));
+  console.log(chalk.blue.bold('\n🚀 Initializing MyIntern (Java/Spring Boot Agent)\n'));
+
+  const cwd = process.cwd();
+  const configManager = new ConfigManager(cwd);
 
   // Check if already initialized
-  const configManager = new ConfigManager();
   if (configManager.exists()) {
     const { overwrite } = await inquirer.prompt([{
       type: 'confirm',
@@ -24,7 +26,6 @@ export async function initCommand() {
   }
 
   // Detect build tool
-  const cwd = process.cwd();
   const hasMaven = fs.existsSync(path.join(cwd, 'pom.xml'));
   const hasGradle = fs.existsSync(path.join(cwd, 'build.gradle')) ||
                     fs.existsSync(path.join(cwd, 'build.gradle.kts'));
@@ -33,61 +34,119 @@ export async function initCommand() {
 
   if (!buildTool) {
     console.log(chalk.red('❌ No Maven or Gradle project detected.'));
-    console.log(chalk.gray('   MyIntern requires a Java/Spring Boot project with Maven or Gradle.'));
-    console.log(chalk.gray('   Make sure you run this command in your project root directory.\n'));
+    console.log(chalk.gray('   MyIntern v1.0 requires a Java/Spring Boot project.'));
+    console.log(chalk.gray('   Make sure you run this in your project root directory.\n'));
     return;
   }
 
-  console.log(chalk.green(`✅ Detected build tool: ${buildTool}\n`));
+  console.log(chalk.green(`✅ Detected: ${buildTool}\n`));
+
+  // Detect Java version from pom.xml or build.gradle
+  let detectedJavaVersion = '17';
+  if (hasMaven) {
+    const pomContent = fs.readFileSync(path.join(cwd, 'pom.xml'), 'utf-8');
+    const match = pomContent.match(/<java\.version>(\d+)<\/java\.version>/);
+    if (match) detectedJavaVersion = match[1];
+  }
 
   // Prompt for configuration
   const answers = await inquirer.prompt([
     {
       type: 'list',
-      name: 'aiProvider',
+      name: 'provider',
       message: 'Select AI provider:',
       choices: [
-        { name: 'Anthropic Claude (Recommended)', value: 'anthropic' },
+        { name: 'Anthropic Claude (Recommended for Java)', value: 'anthropic' },
         { name: 'OpenAI GPT-4', value: 'openai' }
       ],
       default: 'anthropic'
     },
     {
-      type: 'password',
-      name: 'apiKey',
-      message: 'Enter API key:',
-      validate: (input) => input.length > 0 || 'API key is required'
+      type: 'list',
+      name: 'model',
+      message: (answers: any) => `Select ${answers.provider === 'anthropic' ? 'Claude' : 'GPT'} model:`,
+      choices: (answers: any) => {
+        const models = SUPPORTED_MODELS[answers.provider as 'anthropic' | 'openai'];
+        return models.map(m => ({ name: m, value: m }));
+      }
+    },
+    {
+      type: 'input',
+      name: 'javaVersion',
+      message: 'Java version:',
+      default: detectedJavaVersion,
+      validate: (input) => /^\d+$/.test(input) || 'Must be a number (e.g., 17, 21)'
+    },
+    {
+      type: 'confirm',
+      name: 'enableTests',
+      message: 'Enable automatic test generation?',
+      default: true
     }
   ]);
 
   // Create configuration
-  const config: MyInternConfig = {
-    ai: {
-      provider: answers.aiProvider,
-      apiKey: answers.apiKey,
-      model: answers.aiProvider === 'anthropic'
-        ? 'claude-sonnet-4-5-20250929'
-        : 'gpt-4-turbo-preview'
+  const config: AgentConfig = {
+    version: '1.0',
+
+    llm: {
+      provider: answers.provider,
+      model: answers.model,
+      api_key: answers.provider === 'anthropic'
+        ? '${ANTHROPIC_API_KEY}'
+        : '${OPENAI_API_KEY}'
     },
-    build: {
-      tool: buildTool
+
+    java: {
+      version: answers.javaVersion
     },
+
     agents: {
-      code: {
-        enabled: true,
-        autoCommit: false
+      code: true,
+      test: answers.enableTests,
+      build: true
+    },
+
+    watch: {
+      paths: ['.myintern/specs/**/*.md', 'src/**/*.java'],
+      ignore: ['target/', '.git/', '.myintern/logs/'],
+      debounce_ms: 2000
+    },
+
+    build: {
+      tool: buildTool as 'maven' | 'gradle',
+      commands: buildTool === 'maven' ? {
+        compile: 'mvn compile',
+        test: 'mvn test',
+        package: 'mvn package -DskipTests'
+      } : {
+        compile: './gradlew compileJava',
+        test: './gradlew test',
+        package: './gradlew build -x test'
       }
+    },
+
+    git: {
+      protected_branches: ['main', 'master', 'production'],
+      auto_commit: false,
+      branch_prefix: 'myintern/'
+    },
+
+    safety: {
+      backward_compatibility: true,
+      run_regression_tests: true
     }
   };
 
   // Save configuration
   configManager.save(config);
+  console.log(chalk.green('   ✓ Created .myintern/agent.yml'));
 
   // Create directory structure
   const dirs = [
-    '.myintern/logs',
-    '.myintern/data',
-    'specs'
+    '.myintern/specs',
+    '.myintern/practices',
+    '.myintern/logs'
   ];
 
   for (const dir of dirs) {
@@ -96,6 +155,57 @@ export async function initCommand() {
       fs.mkdirSync(fullPath, { recursive: true });
     }
   }
+  console.log(chalk.green('   ✓ Created directory structure'));
+
+  // Prompt for practices template format
+  const { practicesFormat } = await inquirer.prompt([{
+    type: 'list',
+    name: 'practicesFormat',
+    message: 'Select coding practices format:',
+    choices: [
+      { name: 'Detailed (50 rules, one per line) - practices.md', value: 'detailed' },
+      { name: 'Minimal (18 compact rules) - practices-min.md', value: 'minimal' }
+    ],
+    default: 'detailed'
+  }]);
+
+  // Copy practices template
+  const practicesFileName = practicesFormat === 'minimal' ? 'practices-min.md' : 'practices.md';
+  const practicesTemplate = path.join(__dirname, '../../../templates', practicesFileName);
+  const practicesDest = path.join(cwd, '.myintern/practices', practicesFileName);
+
+  if (fs.existsSync(practicesTemplate)) {
+    fs.copyFileSync(practicesTemplate, practicesDest);
+    console.log(chalk.green(`   ✓ Created practices/${practicesFileName}`));
+  } else {
+    console.log(chalk.yellow(`   ⚠ Template not found: ${practicesTemplate}`));
+  }
+
+  // Copy spec template
+  const specTemplate = path.join(__dirname, '../../../templates/spec.md');
+  const specDest = path.join(cwd, '.myintern/specs/spec-example.md');
+
+  if (fs.existsSync(specTemplate)) {
+    fs.copyFileSync(specTemplate, specDest);
+    console.log(chalk.green('   ✓ Created specs/spec-example.md'));
+  } else {
+    console.log(chalk.yellow(`   ⚠ Template not found: ${specTemplate}`));
+  }
+
+  // Create .env.example
+  const envExample = `# MyIntern Environment Variables
+
+# Set your API key here (DO NOT commit this file with real keys)
+${answers.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}=your_key_here
+
+# Get your key from:
+# - Anthropic: https://console.anthropic.com/
+# - OpenAI: https://platform.openai.com/api-keys
+`;
+
+  const envExamplePath = path.join(cwd, '.myintern/.env.example');
+  fs.writeFileSync(envExamplePath, envExample);
+  console.log(chalk.green('   ✓ Created .env.example'));
 
   // Add to .gitignore
   const gitignorePath = path.join(cwd, '.gitignore');
@@ -103,50 +213,20 @@ export async function initCommand() {
     ? fs.readFileSync(gitignorePath, 'utf-8')
     : '';
 
-  if (!gitignore.includes('.myintern')) {
-    gitignore += '\n# MyIntern\n.myintern/\n';
+  if (!gitignore.includes('.myintern/logs/')) {
+    gitignore += '\n# MyIntern\n.myintern/logs/\n.myintern/.env\n';
     fs.writeFileSync(gitignorePath, gitignore);
-    console.log(chalk.gray('   Added .myintern/ to .gitignore'));
-  }
-
-  // Create example spec file
-  const exampleSpec = `# Example Feature Specification
-
-## TODO: Implement User Registration Endpoint
-
-### Requirements
-- Create a REST endpoint for user registration
-- POST /api/users/register
-- Accept: email, password, firstName, lastName
-- Return: user ID and success message
-
-### Acceptance Criteria
-- [ ] Email validation (must be valid email format)
-- [ ] Password validation (min 8 characters, 1 uppercase, 1 number)
-- [ ] Duplicate email check (return 409 Conflict if exists)
-- [ ] Password hashing (use BCrypt)
-- [ ] Return 201 Created on success
-
-### Implementation Notes
-- Follow existing Spring Boot patterns
-- Use @RestController and @PostMapping
-- Add proper input validation with @Valid
-- Return appropriate HTTP status codes
-- Add error handling
-
-Delete this file and create your own specs when ready!
-`;
-
-  const exampleSpecPath = path.join(cwd, 'specs', 'EXAMPLE_SPEC.md');
-  if (!fs.existsSync(exampleSpecPath)) {
-    fs.writeFileSync(exampleSpecPath, exampleSpec);
-    console.log(chalk.gray('   Created example spec: specs/EXAMPLE_SPEC.md'));
+    console.log(chalk.green('   ✓ Updated .gitignore'));
   }
 
   console.log(chalk.green('\n✅ MyIntern initialized successfully!\n'));
   console.log(chalk.white('📝 Next steps:\n'));
-  console.log(chalk.gray('  1. Review the example spec in specs/EXAMPLE_SPEC.md'));
-  console.log(chalk.gray('  2. Create your own spec files in specs/ directory'));
-  console.log(chalk.gray('  3. Run: myintern start'));
-  console.log(chalk.gray('  4. MyIntern will watch and generate code automatically\n'));
+  console.log(chalk.gray(`  1. Set your API key:`));
+  console.log(chalk.cyan(`     export ${answers.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}=your_key_here\n`));
+  console.log(chalk.gray(`  2. Review coding practices: .myintern/practices/${practicesFileName}`));
+  console.log(chalk.gray('  3. Check example spec: .myintern/specs/spec-example.md'));
+  console.log(chalk.gray('  4. Create your own spec files: .myintern/specs/spec-<feature-name>.md'));
+  console.log(chalk.gray('  5. Start the agent:'));
+  console.log(chalk.cyan('     myintern start\n'));
+  console.log(chalk.yellow('⚠️  Important: All spec files must start with "spec-" prefix\n'));
 }
