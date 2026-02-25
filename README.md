@@ -25,10 +25,20 @@ npm install -g myintern
 # Initialize in your Spring Boot project
 cd my-spring-project
 myintern init
+```
 
-# Set your API key
+**Set up authentication (pick one):**
+
+```bash
+# Option 1: Claude Pro/Max subscribers (Recommended — free with subscription)
+brew install anthropics/claude/claude
+claude auth login
+
+# Option 2: Anthropic API key
 export ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
 
+```bash
 # Start watching
 myintern start
 ```
@@ -63,7 +73,7 @@ MyIntern detects the spec, analyzes your codebase patterns, generates code, and 
 
 **Local-First & Secure:**
 - Runs on your machine
-- Bring your own API key
+- Free with Claude Pro/Max subscription, or bring your own API key
 - Open source MIT license
 
 ## Commands
@@ -81,10 +91,16 @@ myintern logs --follow     # View logs
 Edit `.myintern/agent.yml` in your project:
 
 ```yaml
+# Option 1: Claude Pro/Max subscription (no API key needed)
 llm:
-  provider: anthropic
+  provider: claude-cli
   model: claude-sonnet-4-5-20250929
-  api_key: ${ANTHROPIC_API_KEY}
+
+# Option 2: Anthropic API key
+# llm:
+#   provider: anthropic
+#   model: claude-sonnet-4-5-20250929
+#   api_key: ${ANTHROPIC_API_KEY}
 
 agents:
   code: true
