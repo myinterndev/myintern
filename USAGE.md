@@ -17,7 +17,7 @@ MyIntern is an autonomous AI coding agent that lives in your Java/Spring Boot re
 - ✅ Generates JUnit tests automatically
 - ✅ Auto-fixes compilation errors (max 3 retries)
 - ✅ Creates feature branches (never commits to main)
-- ✅ BYOK (Bring Your Own Key) - your AI, your costs
+- ✅ Free with Claude Pro/Max subscription, or BYOK (Bring Your Own Key)
 - ✅ **NEW v1.1:** Zero-setup code review (`myintern review`) - audit any codebase instantly
 - ✅ **NEW v1.1:** Rollback support - safely undo any changes with git integration
 - ✅ **NEW v1.1:** Dry-run preview - see changes before applying them
@@ -53,7 +53,7 @@ myintern init
 
 **What it does:**
 1. Detects your build tool (Maven or Gradle)
-2. Asks for AI provider (Anthropic Claude or OpenAI GPT-4)
+2. Asks for AI provider (Claude CLI with Pro subscription, Anthropic API, OpenAI, or Bedrock)
 3. Prompts for model selection
 4. Creates `.myintern/` folder structure
 5. Copies Java coding practices template
@@ -78,13 +78,45 @@ your-project/
 └── src/...
 ```
 
-### Step 2: Set Your API Key or AWS Profile
+### Step 2: Set Up Authentication
 
-MyIntern supports three AI providers:
+MyIntern supports four AI providers:
 
-#### **Option A: Anthropic Claude (Recommended for Java)**
+#### **Option A: Claude Code CLI — Claude Pro/Max Subscribers (Recommended)**
 
-Get your API key: https://console.anthropic.com/
+If you have a Claude Pro ($20/mo) or Max ($100/mo) subscription, you can use MyIntern **at no extra API cost** via the Claude Code CLI. This uses your existing subscription's OAuth session.
+
+**One-time setup:**
+```bash
+# Install Claude Code CLI
+brew install anthropics/claude/claude
+
+# Authenticate with your Claude account
+claude auth login
+```
+
+**Verify it works:**
+```bash
+claude auth status
+# Should show: loggedIn: true, subscriptionType: pro (or max)
+```
+
+In your `.myintern/agent.yml`:
+```yaml
+llm:
+  provider: claude-cli
+  model: claude-sonnet-4-5-20250929
+  # No API key needed — uses Claude Code OAuth
+```
+
+**Important:** Do NOT set `ANTHROPIC_API_KEY` in your environment when using `claude-cli`. If you previously exported one, unset it:
+```bash
+unset ANTHROPIC_API_KEY
+```
+
+#### **Option B: Anthropic API Key (Pay-per-use)**
+
+If you prefer direct API access (pay per token), get your API key from https://console.anthropic.com/
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-xxx...
@@ -96,7 +128,7 @@ echo 'export ANTHROPIC_API_KEY=sk-ant-xxx...' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-#### **Option B: OpenAI**
+#### **Option C: OpenAI**
 
 Get your API key: https://platform.openai.com/api-keys
 
@@ -104,7 +136,7 @@ Get your API key: https://platform.openai.com/api-keys
 export OPENAI_API_KEY=sk-xxx...
 ```
 
-#### **Option C: AWS Bedrock (with SSO/Profile Support)**
+#### **Option D: AWS Bedrock (with SSO/Profile Support)**
 
 AWS Bedrock provides Claude models through AWS infrastructure. This option is ideal for teams already using AWS with SSO authentication.
 
@@ -328,15 +360,31 @@ git merge myintern/feature-USER_REGISTRATION_SPEC
 ```yaml
 version: "1.0"
 
-# AI Provider (BYOK - Bring Your Own Key)
-llm:
-  provider: anthropic  # anthropic | openai | bedrock
-  model: claude-sonnet-4-5-20250929  # or gpt-4o or anthropic.claude-sonnet-4-5-v1:0
-  api_key: ${ANTHROPIC_API_KEY}  # env var reference (not required for bedrock with profile)
+# AI Provider — pick one:
 
-  # AWS Bedrock specific (optional, only for provider: bedrock)
-  # aws_region: us-east-1  # AWS region for Bedrock
-  # aws_profile: ${AWS_PROFILE}  # AWS SSO profile/session name
+# Option 1: Claude Pro/Max subscription (recommended — no API key needed)
+llm:
+  provider: claude-cli  # Uses Claude Code CLI OAuth
+  model: claude-sonnet-4-5-20250929
+
+# Option 2: Anthropic API key (pay-per-use)
+# llm:
+#   provider: anthropic
+#   model: claude-sonnet-4-5-20250929
+#   api_key: ${ANTHROPIC_API_KEY}
+
+# Option 3: OpenAI
+# llm:
+#   provider: openai
+#   model: gpt-4o
+#   api_key: ${OPENAI_API_KEY}
+
+# Option 4: AWS Bedrock (enterprise)
+# llm:
+#   provider: bedrock
+#   model: anthropic.claude-sonnet-4-5-v1:0
+#   aws_region: us-east-1
+#   aws_profile: ${AWS_PROFILE}
 
 # Java/Spring Boot Settings
 java:
@@ -535,40 +583,43 @@ build:
 
 ### Supported Models
 
-**Anthropic Claude (Direct API - Recommended for Java):**
+**Claude Code CLI (`provider: claude-cli`) — Recommended for Pro/Max Subscribers:**
 - `claude-sonnet-4-5-20250929` - Best for complex Spring Boot code
 - `claude-3-5-sonnet-20241022` - Fast, good quality
 - `claude-3-opus-20240229` - Highest quality, slower
 - `claude-3-haiku-20240307` - Fastest, budget-friendly
+- Uses your Claude Pro/Max subscription — **no per-token API cost**
 
-**AWS Bedrock (Claude via AWS - Best for Enterprise/AWS Teams):**
+**Anthropic Claude (Direct API — `provider: anthropic`):**
+- Same models as above, billed per-token via API key
+
+**AWS Bedrock (`provider: bedrock`) — Best for Enterprise/AWS Teams:**
 - `anthropic.claude-sonnet-4-5-v1:0` - Best for complex Spring Boot code (via Bedrock)
 - `anthropic.claude-3-5-sonnet-20241022-v2:0` - Fast, good quality (via Bedrock)
 - `anthropic.claude-3-opus-20240229-v1:0` - Highest quality (via Bedrock)
 - `anthropic.claude-3-haiku-20240307-v1:0` - Fastest, budget-friendly (via Bedrock)
 
-**OpenAI:**
+**OpenAI (`provider: openai`):**
 - `gpt-4o` - Latest, good for Java
 - `gpt-4-turbo` - Fast, reliable
 - `gpt-4` - Classic, stable
 - `gpt-3.5-turbo` - Budget option (not recommended for Spring Boot)
 
-**Cost estimates (as of 2025):**
-- **Anthropic Direct API:**
-  - Claude Sonnet 4.5: ~$3 per 1M input tokens, ~$15 per 1M output tokens
-- **AWS Bedrock:**
-  - Claude Sonnet 4.5: ~$3 per 1M input tokens, ~$15 per 1M output tokens (same pricing, but billed through AWS)
-  - Benefits: Consolidated AWS billing, AWS SSO integration, no separate Anthropic account needed
-- **OpenAI:**
-  - GPT-4o: ~$5 per 1M input tokens, ~$15 per 1M output tokens
+**Cost comparison:**
 
-**Typical feature cost:** $0.05 - $0.30 per feature spec (depending on complexity)
+| Provider | Cost | Best For |
+|----------|------|----------|
+| **Claude CLI** (Pro subscription) | **$0/feature** (included in $20/mo Pro) | Individual developers, small teams |
+| **Claude CLI** (Max subscription) | **$0/feature** (included in $100/mo Max) | Power users, higher rate limits |
+| **Anthropic Direct API** | ~$0.05–$0.30/feature | High-volume automation, CI/CD |
+| **AWS Bedrock** | ~$0.05–$0.30/feature (billed via AWS) | Enterprise teams with AWS SSO |
+| **OpenAI GPT-4o** | ~$0.10–$0.40/feature | Teams already on OpenAI |
 
-**When to use AWS Bedrock:**
-- Your team already uses AWS with SSO authentication
-- You want consolidated AWS billing (no separate AI provider account)
-- You need AWS compliance/governance features
-- You want to use IAM roles instead of API keys
+**When to use each:**
+- **Claude CLI** — You have a Claude Pro/Max subscription and want zero API cost
+- **Anthropic API** — You need high-volume automated usage or CI/CD integration
+- **AWS Bedrock** — Enterprise teams with AWS SSO, consolidated billing, IAM roles
+- **OpenAI** — Teams already invested in the OpenAI ecosystem
 
 ---
 
@@ -739,11 +790,16 @@ This works automatically on AWS compute with IAM roles.
 You can easily switch providers by changing the config:
 
 ```yaml
-# Development: Use Anthropic direct (personal API key)
+# Development: Claude Pro subscription (free, no API key)
 llm:
-  provider: anthropic
+  provider: claude-cli
   model: claude-sonnet-4-5-20250929
-  api_key: ${ANTHROPIC_API_KEY}
+
+# Development alternative: Anthropic API key (pay-per-use)
+# llm:
+#   provider: anthropic
+#   model: claude-sonnet-4-5-20250929
+#   api_key: ${ANTHROPIC_API_KEY}
 
 # Production: Use AWS Bedrock (company SSO)
 # llm:
@@ -1330,11 +1386,15 @@ If your team already uses:
 # Install
 npm install -g myintern
 
+# If you have Claude Pro/Max, just authenticate once:
+claude auth login
+
 # Run immediately — no config files needed
 cd /path/to/your/spring-boot-project
 myintern run "Add GET /health endpoint returning {status: ok}"
 
 # Auto-detects:
+# - Claude CLI OAuth → uses Pro subscription (free)
 # - pom.xml → Java + Maven
 # - CLAUDE.md → Team coding standards
 # - .cursorrules → Cursor conventions
@@ -1347,7 +1407,12 @@ myintern watch  # Watch mode, process specs as they appear
 
 ### Auto-Detection Logic
 
-When no `.myintern/agent.yml` exists:
+**Authentication (checked in order):**
+1. Claude Code CLI installed and authenticated → `provider: claude-cli` (free with Pro/Max)
+2. `ANTHROPIC_API_KEY` env var set → `provider: anthropic`
+3. `OPENAI_API_KEY` env var set → `provider: openai`
+
+**Project type (when no `.myintern/agent.yml` exists):**
 - `pom.xml` found → Java + Maven
 - `build.gradle` found → Java + Gradle
 - `package.json` → Node.js/TypeScript *(future)*
@@ -1688,7 +1753,9 @@ cat .myintern/feedback/feedback.json | jq
 
 ### "Environment variable ANTHROPIC_API_KEY not found"
 
-**Solution:**
+**If using `provider: claude-cli`:** You don't need this variable. Make sure your config uses `provider: claude-cli` (not `provider: anthropic`) and remove any `api_key:` line from `.myintern/agent.yml`.
+
+**If using `provider: anthropic`:**
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-xxx...
 ```
@@ -1698,6 +1765,45 @@ Make it permanent:
 echo 'export ANTHROPIC_API_KEY=sk-ant-xxx...' >> ~/.zshrc
 source ~/.zshrc
 ```
+
+### "Invalid API key · Fix external API key" (Claude CLI)
+
+**Cause:** An `ANTHROPIC_API_KEY` environment variable is set in your shell, which overrides the Claude CLI OAuth session.
+
+**Solution:**
+```bash
+# Remove the stale API key from current session
+unset ANTHROPIC_API_KEY
+
+# Verify Claude CLI auth is healthy
+claude auth status
+# Should show: loggedIn: true, subscriptionType: pro
+
+# If not logged in, re-authenticate
+claude auth login
+```
+
+Also remove it from `~/.zshrc` or `~/.bashrc` if it was exported there permanently.
+
+**Note:** MyIntern v1.2+ automatically strips `ANTHROPIC_API_KEY` from the child process when using `provider: claude-cli`, so this should not recur after updating.
+
+### "Claude CLI not authenticated or blocked"
+
+**Cause:** Claude Code CLI is not installed or not logged in.
+
+**Solution:**
+```bash
+# Install Claude Code CLI
+brew install anthropics/claude/claude
+
+# Authenticate
+claude auth login
+
+# Verify
+claude auth status
+```
+
+If you see `subscriptionType: free`, you'll need a Claude Pro or Max subscription for API-level usage.
 
 ### "AWS SSO session expired" (for Bedrock users)
 
@@ -2303,7 +2409,7 @@ Most AI coding tools (GitHub Copilot, Cursor, Cody, etc.) focus on **single-file
 2. **Build-Test-Fix Loop** - Actually compiles and tests code, auto-fixes errors
 3. **Multi-Repo Awareness** - Understands context across multiple repositories (see below)
 4. **Customizable Practices** - Follows YOUR team's coding standards, not generic patterns
-5. **BYOK (Bring Your Own Key)** - Your AI, your costs, your data privacy
+5. **Free with Claude Pro/Max or BYOK** - Use your existing subscription or bring your own API key
 
 ---
 
@@ -2723,7 +2829,7 @@ This repo has 15 feedback entries (12 positive, 3 negative).
 **✅ v1.0 Core Features (Complete):**
 - Java/Spring Boot support (Maven/Gradle)
 - Code + Test + Build agents
-- BYOK (Anthropic/OpenAI/Bedrock)
+- Free with Claude Pro/Max, or BYOK (Anthropic/OpenAI/Bedrock)
 - Auto-fix retry logic (max 3 attempts)
 - Safety rules (protected branches, no file deletion)
 
