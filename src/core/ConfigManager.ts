@@ -41,9 +41,9 @@ export interface AgentConfig {
 
   // BYOK — Bring Your Own Key
   llm: {
-    provider: 'anthropic' | 'openai' | 'bedrock';
+    provider: 'anthropic' | 'openai' | 'bedrock' | 'claude-cli';
     model: string; // Must be from SUPPORTED_MODELS
-    api_key?: string; // env var reference like ${ANTHROPIC_API_KEY} (not required for bedrock with profile)
+    api_key?: string; // env var reference like ${ANTHROPIC_API_KEY} (not required for bedrock with profile or claude-cli)
     // AWS Bedrock specific options
     aws_region?: string; // AWS region for Bedrock (e.g., 'us-east-1')
     aws_profile?: string; // AWS SSO profile/session name (e.g., '${AWS_PROFILE}')
@@ -243,8 +243,8 @@ export class ConfigManager {
     if (!cfg.llm) {
       errors.push('Missing "llm" configuration');
     } else {
-      if (!['anthropic', 'openai', 'bedrock'].includes(cfg.llm.provider)) {
-        errors.push('Invalid llm.provider (must be: anthropic, openai, bedrock)');
+      if (!['anthropic', 'openai', 'bedrock', 'claude-cli'].includes(cfg.llm.provider)) {
+        errors.push('Invalid llm.provider (must be: anthropic, openai, bedrock, claude-cli)');
       }
 
       // API key validation - not required for bedrock with profile
@@ -260,11 +260,18 @@ export class ConfigManager {
         if (cfg.llm.aws_secret_access_key && !cfg.llm.aws_access_key_id) {
           errors.push('llm.aws_access_key_id is required when llm.aws_secret_access_key is provided');
         }
+      } else if (cfg.llm.provider === 'claude-cli') {
+        // Claude CLI uses OAuth - no API key needed
+        // User must have Claude Code CLI installed and authenticated
       } else {
-        // For anthropic and openai, api_key is required
-        if (!cfg.llm.api_key) {
-          errors.push('Missing llm.api_key');
+        // For anthropic, api_key is optional (SDK auto-discovers from env or Claude CLI)
+        // For openai, api_key is required
+        if (cfg.llm.provider === 'openai' && !cfg.llm.api_key) {
+          errors.push('Missing llm.api_key (required for OpenAI provider)');
         }
+        // For Anthropic: if no api_key, SDK will auto-discover from:
+        // 1. ANTHROPIC_API_KEY env var
+        // 2. Claude CLI OAuth session (if available)
       }
 
       if (!cfg.llm.model) {

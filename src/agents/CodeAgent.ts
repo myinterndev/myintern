@@ -42,8 +42,9 @@ export class CodeAgent extends Agent {
   private readonly rollbackManager: RollbackManager;
   private readonly feedbackLoop: FeedbackLoop;
   private readonly springBootDetector: SpringBootDetector;
+  private readonly verbose: boolean;
 
-  constructor() {
+  constructor(options: { verbose?: boolean } = {}) {
     super('code-agent');
     this.repoPath = process.cwd();
     this.configManager = new ConfigManager(this.repoPath);
@@ -54,6 +55,7 @@ export class CodeAgent extends Agent {
     this.rollbackManager = new RollbackManager(this.repoPath);
     this.feedbackLoop = new FeedbackLoop(this.repoPath);
     this.springBootDetector = new SpringBootDetector(this.repoPath);
+    this.verbose = options.verbose || false;
   }
 
   private pendingSpecs: Set<string> = new Set();
@@ -144,10 +146,19 @@ export class CodeAgent extends Agent {
     try {
       // Parse all specs
       const parser = new SpecParser();
-      const specs = specPaths.map(p => parser.parse(p)).filter(spec => parser.hasPendingWork(spec));
+      const parsedSpecs = specPaths.map(p => parser.parse(p));
+
+      // Show which specs were detected
+      for (const spec of parsedSpecs) {
+        const fileName = path.basename(spec.filePath);
+        const hasPending = parser.hasPendingWork(spec, this.repoPath);
+        console.log(chalk.gray(`   📄 ${fileName}: ${hasPending ? 'pending work found' : 'no pending work'}`));
+      }
+
+      const specs = parsedSpecs.filter(spec => parser.hasPendingWork(spec, this.repoPath));
 
       if (specs.length === 0) {
-        console.log(chalk.gray('   ✓ No pending work, skipping\n'));
+        console.log(chalk.yellow('\n   ⚠️  No specs with pending work (add TODO, PENDING, IMPLEMENT, or - [ ] to trigger)\n'));
         return;
       }
 
@@ -246,7 +257,7 @@ export class CodeAgent extends Agent {
       }
 
       // Check if has pending work
-      if (!parser.hasPendingWork(spec)) {
+      if (!parser.hasPendingWork(spec, this.repoPath)) {
         console.log(chalk.gray('   ✓ No pending work, skipping\n'));
         return;
       }
@@ -389,7 +400,7 @@ export class CodeAgent extends Agent {
       if (this.agentConfig.agents.build) {
         console.log(chalk.blue('\n   🔨 Building project...'));
 
-        const buildAgent = new BuildAgent(this.repoPath);
+        const buildAgent = new BuildAgent(this.repoPath, { verbose: this.verbose });
         const orchestrator = new RetryOrchestrator({ maxAttempts: 3 });
 
         const buildResult = await orchestrator.execute(
