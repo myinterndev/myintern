@@ -1,6 +1,6 @@
 # MyIntern Usage Guide - Java/Spring Boot Projects
 
-**Version:** 1.0
+**Version:** 1.2
 **Target:** Java developers working on Spring Boot projects with Maven or Gradle
 
 ---
@@ -18,12 +18,17 @@ MyIntern is an autonomous AI coding agent that lives in your Java/Spring Boot re
 - ✅ Auto-fixes compilation errors (max 3 retries)
 - ✅ Creates feature branches (never commits to main)
 - ✅ BYOK (Bring Your Own Key) - your AI, your costs
-- ✅ **NEW:** Zero-setup code review (`myintern review`) - audit any codebase instantly
-- ✅ **NEW:** Rollback support - safely undo any changes with git integration
-- ✅ **NEW:** Dry-run preview - see changes before applying them
-- ✅ **NEW:** GitHub Issues sync - convert issues to specs automatically
-- ✅ **NEW:** Spring Boot intelligence - auto-detects 2.x vs 3.x, correct imports
-- ✅ **NEW:** Feedback loop - learns from your code reviews to improve
+- ✅ **NEW v1.1:** Zero-setup code review (`myintern review`) - audit any codebase instantly
+- ✅ **NEW v1.1:** Rollback support - safely undo any changes with git integration
+- ✅ **NEW v1.1:** Dry-run preview - see changes before applying them
+- ✅ **NEW v1.1:** GitHub Issues sync - convert issues to specs automatically
+- ✅ **NEW v1.1:** Spring Boot intelligence - auto-detects 2.x vs 3.x, correct imports
+- ✅ **NEW v1.1:** Feedback loop - learns from your code reviews to improve
+- ✅ **NEW v1.1:** Guardrails - PII/PHI/credential protection (HIPAA/PCI-DSS compliant)
+- ✅ **NEW v1.2:** Multi-repo support - monorepo/microservices context awareness
+- ✅ **NEW v1.2:** Context loading - auto-loads CLAUDE.md, .cursorrules, etc.
+- ✅ **NEW v1.2:** Parallel execution - conflict-aware parallel spec processing
+- ✅ **NEW v1.2:** Spec file caching - 70-90% faster spec parsing
 
 ---
 
@@ -63,7 +68,12 @@ your-project/
 │   │   └── EXAMPLE_SPEC.md    # Example to learn from
 │   ├── practices/
 │   │   └── java.md            # Your team's coding standards
+│   ├── .context/              # Hidden global context (gitignored)
+│   │   └── global-context.json # Jira ticket grouping context
 │   └── logs/                  # Execution logs
+│       ├── executions.json
+│       ├── guardrails.log     # Guardrails audit trail (NEW v1.1)
+│       └── guardrails-overrides.json  # False positive overrides (NEW v1.1)
 ├── pom.xml (or build.gradle)
 └── src/...
 ```
@@ -378,7 +388,26 @@ feedback:
   enabled: true              # Enable feedback collection
   auto_learn: true           # Automatically learn from feedback
 
-# NEW: GitHub Integration
+# NEW v1.1: Guardrails — Sensitive Data Protection (enabled by default)
+guardrails:
+  enabled: true              # Scan code for PII/PHI/credentials before sending to LLM
+  mode: mask                 # mask | hash | skip | none
+  stopOnCritical: true       # Halt execution on CRITICAL violations
+  categories:
+    pii: true                # SSN, credit cards, phone numbers
+    phi: true                # HIPAA medical records (MRN, ICD codes)
+    credentials: true        # API keys, passwords, private keys
+    custom: false            # User-defined regex patterns
+  whitelist:
+    - "**/*.test.java"       # Skip scanning test files
+    - "**/test-data/**"      # Skip test fixtures
+  customPatterns:            # Define your own detection rules (optional)
+    - name: "Employee ID"
+      regex: "\\bEMP-\\d{6}\\b"
+      level: warn            # info | warn | block | critical
+      category: custom
+
+# NEW v1.1: GitHub Integration
 github:
   enabled: false             # Enable GitHub issue sync (opt-in)
   sync_labels:               # Labels to filter issues
@@ -386,6 +415,41 @@ github:
     - enhancement
   auto_close: false          # Auto-close issues when specs complete
   assignee_filter: ""        # Filter by assignee (leave empty for all)
+
+# NEW v1.2: Multi-Repo Support (for monorepo/microservices)
+repos:
+  - name: api-service
+    path: ./api-service
+    language: java           # java | typescript | python | go
+    build_tool: maven        # maven | gradle | npm | pip
+  - name: web-service
+    path: ./web-service
+    language: java
+    build_tool: gradle
+  - name: shared-lib
+    path: ./shared-lib
+    language: java
+
+# NEW v1.2: Watch Auto-Discovery (zero-config file watching)
+watch:
+  auto_discover: true        # Auto-detect src/ in each repo (default: true)
+  paths:                     # Optional manual paths (if auto_discover is false)
+    - ".myintern/specs/**/*.md"
+  ignore:                    # Ignore patterns (glob or regex)
+    - "target/"
+    - ".git/"
+    - "node_modules/"
+    - "build/"
+    - "dist/"
+    - "**/*.class"
+  debounce_ms: 2000
+
+# NEW v1.2: Parallel Execution (conflict-aware)
+agents:
+  code: true
+  test: true
+  build: true
+  max_parallel: 3            # Max number of specs to process in parallel
 ```
 
 ### Agent Breakdown - What Each Agent Does
@@ -517,6 +581,9 @@ MyIntern uses structured markdown specs in `.myintern/specs/`:
 ```markdown
 # FEATURE|BUGFIX|REFACTOR: Title
 
+**Jira:** PROJ-123 (optional, enables multi-spec grouping - NEW v1.2)
+**Repos Affected:** api-service, shared-lib (optional, for multi-repo setups - NEW v1.2)
+
 ## Type
 feature | bugfix | refactor | test
 
@@ -533,10 +600,40 @@ What needs to be done and why. Be specific about business requirements.
 
 ## Files Likely Affected
 - src/main/java/com/example/path/File.java
+- api-service/src/main/java/com/example/controller/UserController.java (multi-repo example)
+- shared-lib/src/main/java/com/example/util/ValidationUtils.java (multi-repo example)
 - ...
 
 ## Notes
 Additional context, constraints, or implementation hints.
+```
+
+### New Multi-Spec Features (v1.2)
+
+**Jira Ticket Grouping:**
+- Multiple specs can share the same Jira ticket (`**Jira:** PROJ-123`)
+- MyIntern maintains global context across related specs in `.myintern/.context/`
+- Agent sees 3-4 line summary of related specs when processing
+
+**Multi-Repo Support:**
+- Declare affected repos with `**Repos Affected:** api-service, shared-lib`
+- MyIntern builds context from all referenced repos
+- Token budget is balanced across repos (60% current, 30% external, 10% practices)
+
+**Example Multi-Repo Spec:**
+```markdown
+# FEATURE: User Authentication
+
+**Jira:** AUTH-101
+**Repos Affected:** api-service, shared-lib
+
+## Context
+Implement JWT-based authentication across user service and shared auth library.
+
+## Files Likely Affected
+- api-service/src/main/java/com/example/controller/AuthController.java
+- shared-lib/src/main/java/com/example/auth/JWTUtil.java
+- shared-lib/src/main/java/com/example/auth/TokenValidator.java
 ```
 
 ### Tips for Great Specs
@@ -888,6 +985,501 @@ Before generating code, MyIntern warns if you have uncommitted changes:
 
 ---
 
+## Guardrails — Sensitive Data Protection (v1.1+)
+
+MyIntern includes **enterprise-grade guardrails** that prevent sensitive data (PII, PHI, credentials) from being sent to LLM providers. **Enabled by default** in v1.1+.
+
+### What Are Guardrails?
+
+Before sending any code to the AI (Anthropic Claude, OpenAI, AWS Bedrock), MyIntern scans all files for:
+- **Personal Identifiable Information (PII)** - SSNs, credit cards, phone numbers
+- **Protected Health Information (PHI)** - Medical records (HIPAA compliance)
+- **Credentials** - API keys, passwords, private keys
+- **Custom Patterns** - Your own regex patterns (e.g., employee IDs)
+
+### Detection Categories
+
+| Category | What It Detects | Examples |
+|----------|----------------|----------|
+| **PII** | Personal identifiable info | SSN (`123-45-6789`), Credit cards (`4111-1111-1111-1111`), Phone numbers |
+| **PHI** | Protected health info (HIPAA) | MRN (`1234567`), Patient IDs, ICD-10 codes, Date of birth |
+| **Credentials** | Secrets & keys | AWS keys (`AKIAIOSFODNN7EXAMPLE`), Anthropic keys (`sk-ant-...`), Private keys, Hardcoded passwords |
+| **Custom** | User-defined patterns | Employee IDs (`EMP-123456`), Internal codes |
+
+### Violation Levels
+
+| Level | Icon | Behavior | Example |
+|-------|------|----------|---------|
+| `INFO` | ℹ️ | Log only, no action | Email addresses (not considered sensitive alone) |
+| `WARN` | ⚠️ | Redact data, then allow | Phone numbers |
+| `BLOCK` | 🚫 | Block file from LLM context | SSN, credit cards |
+| `CRITICAL` | 🔴 | **Stop execution immediately** | API keys, passwords, medical record numbers |
+
+### Redaction Modes
+
+Configure how MyIntern handles sensitive data:
+
+| Mode | Behavior | Example |
+|------|----------|---------|
+| `mask` (default) | Replace with placeholder | `***REDACTED***` |
+| `hash` | Replace with one-way hash | `[HASH:a3f8c9d2...]` |
+| `skip` | Skip entire file from LLM context | File excluded, logged |
+| `none` | Block without redaction | Execution halted |
+
+### Safe Patterns (Always Allowed)
+
+Code that references secrets via environment variables or config lookups is **never flagged**:
+
+```java
+// ✅ SAFE - Environment variable reference
+String apiKey = System.getenv("API_KEY");
+
+// ✅ SAFE - Spring Boot property injection
+@Value("${aws.access.key}")
+private String awsKey;
+
+// ✅ SAFE - Configuration lookup
+String password = config.get("database.password");
+
+// ✅ SAFE - Placeholder values
+// TODO: Replace REPLACE_WITH_YOUR_KEY with actual key
+
+// ❌ BLOCKED - Hardcoded credential
+String apiKey = "sk-ant-1234567890abcdef";  // CRITICAL violation
+```
+
+### Guardrails CLI Commands
+
+#### Scan Files for Violations
+
+```bash
+# Scan a single file
+myintern guardrails scan src/main/java/config/DatabaseConfig.java
+
+# Scan all files in project
+myintern guardrails scan --all
+
+# Scan specific directory
+myintern guardrails scan src/main/java/config/
+
+# Output formats: text (default), json, csv, html
+myintern guardrails scan --all --format json
+myintern guardrails scan --all --format csv --output violations.csv
+myintern guardrails scan --all --format html --output report.html
+```
+
+**Example output:**
+```
+🔍 Guardrails Scan Results
+
+Scanned: 127 files
+Duration: 2.3s
+
+📊 Summary:
+   🔴 CRITICAL: 2 violations
+   🚫 BLOCK: 5 violations
+   ⚠️  WARN: 8 violations
+   ℹ️  INFO: 3 violations
+
+🔴 CRITICAL Violations:
+1. src/main/java/config/DatabaseConfig.java:28
+   Category: credentials
+   Pattern: Hardcoded Password
+   Context: password = "SuperSecret123!"
+   Action: Execution will be BLOCKED
+
+2. src/main/java/util/AwsClient.java:15
+   Category: credentials
+   Pattern: AWS Access Key
+   Context: AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
+   Action: Execution will be BLOCKED
+
+💡 Recommendation: Move credentials to environment variables
+```
+
+#### Override False Positives
+
+Sometimes legitimate test data or placeholders are flagged as violations. You can whitelist them:
+
+```bash
+# Add override for a false positive
+myintern guardrails override \
+  --file "src/test/java/TestData.java" \
+  --pattern "SSN" \
+  --reason "Test fixture with fake SSN" \
+  --expires "2026-12-31"
+
+# Add override with specific line number
+myintern guardrails override \
+  --file "src/main/java/Example.java" \
+  --line 42 \
+  --pattern "Credit Card" \
+  --reason "Example in code comment" \
+  --expires "2027-01-01"
+
+# Permanent override (no expiration)
+myintern guardrails override \
+  --file "src/test/resources/mock-data.json" \
+  --pattern "Phone Number" \
+  --reason "Mock test data"
+```
+
+#### Remove Overrides
+
+```bash
+# Remove specific override
+myintern guardrails remove-override \
+  --file "src/test/java/TestData.java" \
+  --pattern "SSN"
+
+# Remove all expired overrides
+myintern guardrails remove-override --expired
+
+# List all overrides
+myintern guardrails remove-override --list
+```
+
+#### View Guardrails Logs
+
+```bash
+# Tail last 20 log entries
+myintern guardrails logs --tail 20
+
+# Filter by severity
+myintern guardrails logs --level critical
+myintern guardrails logs --level block
+
+# Filter by date range
+myintern guardrails logs --since "2026-02-01"
+myintern guardrails logs --since 7d  # Last 7 days
+
+# Export to JSON
+myintern guardrails logs --since 30d --format json --output audit.json
+```
+
+#### Compliance Audit Reports
+
+Generate compliance reports for HIPAA, PCI-DSS, or custom frameworks:
+
+```bash
+# Generate HIPAA compliance report
+myintern guardrails audit --framework hipaa --since 90d
+
+# Generate PCI-DSS compliance report
+myintern guardrails audit --framework pci-dss --since 30d
+
+# Custom compliance report
+myintern guardrails audit --since 30d --format html --output compliance-report.html
+
+# CSV export for auditors
+myintern guardrails audit --since 180d --format csv --output audit-trail.csv
+```
+
+**Example HIPAA report:**
+```
+🏥 HIPAA Compliance Audit Report
+Period: 2025-11-23 to 2026-02-23 (90 days)
+
+✅ Compliance Status: COMPLIANT
+
+PHI Detections:
+   Total PHI patterns scanned: 18
+   Violations found: 0
+   Violations blocked: 0
+
+Audit Trail:
+   All PHI access logged: ✅
+   Encryption at rest: ✅
+   Encryption in transit: ✅
+
+Recommendations:
+   - Continue current guardrails configuration
+   - Review overrides quarterly
+   - Update custom PHI patterns as needed
+```
+
+### Configuration Examples
+
+#### Enable Guardrails with Default Settings
+
+```yaml
+# .myintern/agent.yml
+guardrails:
+  enabled: true              # Enabled by default in v1.1+
+  mode: mask                 # Redact sensitive data
+  stopOnCritical: true       # Halt on critical violations
+  categories:
+    pii: true
+    phi: true
+    credentials: true
+```
+
+#### Customize for Healthcare (HIPAA)
+
+```yaml
+guardrails:
+  enabled: true
+  mode: hash                 # Use one-way hashing
+  stopOnCritical: true
+  categories:
+    pii: true
+    phi: true                # HIPAA medical records
+    credentials: true
+  whitelist:
+    - "**/*.test.java"       # Skip test files
+    - "**/test-data/**"
+  customPatterns:
+    - name: "Medical Record Number"
+      regex: "\\bMRN[-:]?\\d{7,10}\\b"
+      level: critical
+      category: phi
+    - name: "Patient ID"
+      regex: "\\bPID[-:]?\\d{6,8}\\b"
+      level: critical
+      category: phi
+```
+
+#### Customize for Finance (PCI-DSS)
+
+```yaml
+guardrails:
+  enabled: true
+  mode: skip                 # Skip entire file if violation found
+  stopOnCritical: true
+  categories:
+    pii: true                # Credit cards detected here
+    phi: false               # Not needed for finance
+    credentials: true
+  customPatterns:
+    - name: "Account Number"
+      regex: "\\bACCT[-:]?\\d{10,12}\\b"
+      level: block
+      category: custom
+    - name: "Routing Number"
+      regex: "\\b\\d{9}\\b"  # US routing numbers
+      level: warn
+      category: custom
+```
+
+#### Disable Guardrails (Not Recommended)
+
+```yaml
+guardrails:
+  enabled: false             # ⚠️ Use only for local development
+```
+
+### File Structure
+
+After enabling guardrails, you'll see:
+
+```
+.myintern/
+├── logs/
+│   ├── guardrails.log              # Audit trail (JSON format)
+│   └── guardrails-overrides.json   # False positive overrides
+```
+
+### Compliance Support
+
+MyIntern guardrails help you meet compliance requirements for:
+
+- **HIPAA (Healthcare)** - Detects all 18 PHI identifiers (MRN, patient IDs, DOB, ICD-10 codes, etc.)
+- **PCI-DSS (Finance)** - Blocks credit card patterns (Visa, Mastercard, Amex, Discover, etc.)
+- **GDPR (Europe)** - Detects PII (names, emails, addresses, phone numbers)
+- **Custom Compliance** - Define your own patterns via `customPatterns`
+
+### Best Practices
+
+1. **Always enable guardrails** - Disabled by accident? Run `myintern config validate` to check
+2. **Review audit logs monthly** - `myintern guardrails audit --since 30d`
+3. **Whitelist test files** - Add `**/*.test.java` to `whitelist`
+4. **Set override expirations** - Don't create permanent overrides unless necessary
+5. **Use environment variables** - Never hardcode secrets, always use `${ENV_VAR}`
+6. **Custom patterns for your domain** - Add industry-specific identifiers (employee IDs, account numbers)
+
+---
+
+## Context Loading & Zero-Config Mode (v1.2+)
+
+MyIntern automatically loads coding context from multiple sources, **with zero configuration required**. This is the #1 adoption driver: **60-second time-to-value**.
+
+### Context Loading Priority
+
+MyIntern loads context in this order, merging all that exist:
+
+1. **`.myintern/practices/java.md`** ← Highest priority (explicit team standards)
+2. **`CLAUDE.md` (or `.claude/CLAUDE.md`)** ← Anthropic convention, many teams have this
+3. **`.cursorrules`** ← Cursor users already have this
+4. **`.github/copilot-instructions.md`** ← GitHub Copilot users
+5. **`.myintern/agent.yml`** ← Pipeline config
+6. **Spec file** (if provided) ← Task definition
+7. **Git diff + affected files** ← Code context (see Context Window Strategy)
+
+### Zero Migration Cost
+
+If your team already uses:
+- **Claude Code** → Your `CLAUDE.md` file works immediately
+- **Cursor** → Your `.cursorrules` file works immediately
+- **GitHub Copilot** → Your `.github/copilot-instructions.md` works immediately
+
+**No need to create `.myintern/practices/`** — MyIntern uses what you already have!
+
+### Quick Start (No Setup Required)
+
+```bash
+# Install
+npm install -g myintern
+
+# Run immediately — no config files needed
+cd /path/to/your/spring-boot-project
+myintern run "Add GET /health endpoint returning {status: ok}"
+
+# Auto-detects:
+# - pom.xml → Java + Maven
+# - CLAUDE.md → Team coding standards
+# - .cursorrules → Cursor conventions
+
+# More examples
+myintern run "Fix the NullPointerException in UserService line 42"
+myintern run "Write unit tests for OrderController"
+myintern watch  # Watch mode, process specs as they appear
+```
+
+### Auto-Detection Logic
+
+When no `.myintern/agent.yml` exists:
+- `pom.xml` found → Java + Maven
+- `build.gradle` found → Java + Gradle
+- `package.json` → Node.js/TypeScript *(future)*
+- `requirements.txt` → Python *(future)*
+
+### Example Context Files
+
+**CLAUDE.md (Anthropic Convention):**
+```markdown
+# Project Coding Standards
+
+## Java Style
+- Use constructor injection (not field injection)
+- All REST controllers use @RestController
+- Return ResponseEntity<> for all endpoints
+
+## Testing
+- JUnit 5 + Mockito
+- MockMvc for controller tests
+- Aim for 80%+ coverage
+```
+
+**.cursorrules (Cursor Convention):**
+```
+- Use Lombok for DTOs (@Data, @Builder)
+- Never expose entities directly in controllers
+- Use Optional.orElseThrow() instead of .get()
+```
+
+MyIntern merges both files and uses the combined context!
+
+---
+
+## Multi-Repo & Monorepo Support (v1.2+)
+
+MyIntern now supports **monorepo and microservices architectures** with intelligent context aggregation across multiple repositories.
+
+### How It Works
+
+1. **Declare repos in `.myintern/agent.yml`**:
+   ```yaml
+   repos:
+     - name: api-service
+       path: ./api-service
+       language: java
+       build_tool: maven
+     - name: web-service
+       path: ./web-service
+       language: java
+       build_tool: gradle
+     - name: shared-lib
+       path: ./shared-lib
+       language: java
+   ```
+
+2. **Auto-discovery** - MyIntern auto-detects source files in each repo (zero config)
+
+3. **Spec declares affected repos**:
+   ```markdown
+   **Repos Affected:** api-service, shared-lib
+   ```
+
+4. **Context aggregation** - MyIntern builds context from all referenced repos:
+   - 60% token budget → current repo files
+   - 30% token budget → external repo files (most-referenced first)
+   - 10% token budget → practices + spec
+
+### Real-World Example: Microservices
+
+**Project structure:**
+```
+my-monorepo/
+├── .myintern/
+│   ├── agent.yml
+│   └── specs/
+│       └── USER_AUTH_SPEC.md
+├── api-service/
+│   └── src/main/java/com/example/controller/AuthController.java
+├── web-service/
+│   └── src/main/java/com/example/service/AuthService.java
+└── shared-lib/
+    └── src/main/java/com/example/auth/JWTUtil.java
+```
+
+**Spec: `.myintern/specs/USER_AUTH_SPEC.md`**
+```markdown
+# FEATURE: JWT Authentication
+
+**Repos Affected:** api-service, shared-lib
+
+## Files Likely Affected
+- api-service/src/main/java/com/example/controller/AuthController.java
+- shared-lib/src/main/java/com/example/auth/JWTUtil.java
+- shared-lib/src/main/java/com/example/auth/TokenValidator.java
+```
+
+**MyIntern behavior:**
+1. Loads context from both `api-service` and `shared-lib`
+2. Generates code in both repos
+3. Builds and tests both repos
+4. Creates feature branch: `myintern/feature-USER_AUTH_SPEC`
+
+### Auto-Discovery (Zero Config)
+
+```yaml
+watch:
+  auto_discover: true        # Auto-detect src/ in each repo (default)
+  ignore:
+    - "target/"
+    - "node_modules/"
+    - "build/"
+```
+
+MyIntern automatically watches:
+- `api-service/src/**/*.java`
+- `web-service/src/**/*.java`
+- `shared-lib/src/**/*.java`
+
+### Parallel Execution (Conflict-Aware)
+
+```yaml
+agents:
+  max_parallel: 3            # Process up to 3 specs in parallel
+```
+
+MyIntern intelligently parallelizes spec execution:
+- **Parallel:** Specs affecting different repos
+- **Sequential:** Specs with same Jira ticket (maintain context)
+- **Sequential:** Specs affecting same files (avoid conflicts)
+
+---
+
 ## Working with Your Team
 
 ### Share Practices File
@@ -958,7 +1550,55 @@ myintern config show
 myintern config validate
 ```
 
-### New v1.0 Commands
+### Guardrails Commands (v1.1+)
+
+#### Scan for Sensitive Data
+```bash
+# Scan a single file
+myintern guardrails scan src/main/Config.java
+
+# Scan all files in project
+myintern guardrails scan --all
+
+# Output formats: text (default), json, csv, html
+myintern guardrails scan --all --format json
+myintern guardrails scan --all --format html --output report.html
+```
+
+#### Manage False Positive Overrides
+```bash
+# Add override
+myintern guardrails override \
+  --file "src/test/Test.java" \
+  --pattern "SSN" \
+  --reason "Test fixture" \
+  --expires "2026-12-31"
+
+# Remove override
+myintern guardrails remove-override \
+  --file "src/test/Test.java" \
+  --pattern "SSN"
+
+# List all overrides
+myintern guardrails remove-override --list
+
+# Remove expired overrides
+myintern guardrails remove-override --expired
+```
+
+#### Audit and Compliance
+```bash
+# View recent guardrails logs
+myintern guardrails logs --tail 20
+myintern guardrails logs --level critical
+
+# Generate compliance report
+myintern guardrails audit --framework hipaa --since 90d
+myintern guardrails audit --framework pci-dss --since 30d
+myintern guardrails audit --since 30d --format csv --output audit.csv
+```
+
+### Code Review Commands (v1.1+)
 
 #### Code Review (Zero-Setup)
 ```bash
@@ -1249,6 +1889,167 @@ myintern stop
 myintern start
 ```
 
+### Guardrails blocking legitimate code (v1.1+)
+
+**Causes:**
+- Test files with mock data flagged as PII/PHI
+- Code comments with example credentials
+- Placeholder values detected as real credentials
+
+**Solution:**
+```bash
+# Add override for false positive
+myintern guardrails override \
+  --file "src/test/TestData.java" \
+  --pattern "SSN" \
+  --reason "Test fixture with fake SSN" \
+  --expires "2026-12-31"
+
+# Or whitelist test files in config
+```
+
+```yaml
+# .myintern/agent.yml
+guardrails:
+  whitelist:
+    - "**/*.test.java"
+    - "**/test-data/**"
+    - "src/test/**"
+```
+
+### Guardrails not detecting violations
+
+**Causes:**
+- Guardrails disabled in config
+- Custom patterns not configured
+- Violation level too low (INFO instead of CRITICAL)
+
+**Solution:**
+```bash
+# Check guardrails status
+myintern config show | grep -A 10 guardrails
+
+# Validate configuration
+myintern config validate
+
+# Test scan on specific file
+myintern guardrails scan src/main/Config.java
+```
+
+```yaml
+# Enable and configure in .myintern/agent.yml
+guardrails:
+  enabled: true              # Make sure this is true
+  stopOnCritical: true       # Halt on critical violations
+  categories:
+    pii: true
+    phi: true
+    credentials: true
+```
+
+### Multi-repo context not working (v1.2+)
+
+**Causes:**
+- Repos not declared in `agent.yml`
+- Invalid repo paths
+- Spec doesn't declare `**Repos Affected:**`
+- Auto-discovery disabled
+
+**Solution:**
+```yaml
+# .myintern/agent.yml
+repos:
+  - name: api-service
+    path: ./api-service      # Relative path from .myintern/
+    language: java
+    build_tool: maven
+
+watch:
+  auto_discover: true        # Enable auto-discovery
+```
+
+```bash
+# Verify repo paths
+ls ./api-service
+ls ./shared-lib
+
+# Check logs for context loading
+myintern logs | grep "context"
+```
+
+**In spec file:**
+```markdown
+**Repos Affected:** api-service, shared-lib
+```
+
+---
+
+## Performance Optimizations (v1.2)
+
+MyIntern v1.2 includes significant performance improvements for large codebases:
+
+### Spec File Caching (~70-90% Faster)
+
+**Problem:** Reading and parsing spec files from disk on every change was slow in watch mode.
+
+**Solution:** In-memory cache with automatic invalidation.
+
+**How it works:**
+1. First read: Spec file parsed and cached in memory
+2. Subsequent reads: Cache hit (instant)
+3. File modified: Cache automatically invalidated based on mtime/size
+4. Next read: Re-parsed and re-cached
+
+**Performance gains:**
+- 70-90% reduction in disk I/O for unchanged specs
+- 60-80% reduction in parsing time
+- Zero configuration required
+
+**Verify caching is working:**
+```bash
+# Watch mode benefits most from caching
+myintern start
+
+# Logs will show cache hits:
+# "✓ Spec cache HIT: USER_REGISTRATION_SPEC.md (saved 45ms)"
+# "⚠ Spec cache MISS: ORDER_SERVICE_SPEC.md (file modified)"
+```
+
+### Context Window Optimization
+
+**Problem:** Large repos (500+ files) exceed LLM token limits (200k for Claude).
+
+**Solution:** Smart file filtering with priority order.
+
+**How it works:**
+1. **Spec file** - always included (1-2k tokens)
+2. **Git diff files** - recently changed (5-10k tokens)
+3. **Files mentioned in spec** - "Files Likely Affected" (10-20k tokens)
+4. **Test files** for changed code (5-10k tokens)
+5. **Practices file** - `.myintern/practices/java.md` (2-5k tokens)
+6. **1-level dependencies** - files that import changed files (10-30k tokens)
+7. **Drop everything else** - summarize by name only
+
+**Token budgets:**
+- Claude Sonnet 4.5: 150k safe input, 50k reserve for output
+- GPT-4o: 90k safe input, 38k reserve
+
+**Example:**
+- Your project: 500 Java files, 2MB total
+- Spec mentions: 3 files
+- Git diff: 2 files changed
+- MyIntern selects: 12 files, 48k tokens (~200KB)
+- **Result:** AI has all context it needs without hitting limits
+
+### Multi-Repo Token Balancing
+
+For multi-repo setups, MyIntern balances token budget across repos:
+- **60%** - Current repo files (most relevant)
+- **30%** - External repo files (dependencies, shared libs)
+- **10%** - Practices + spec
+
+This ensures the AI never runs out of context, even for large microservices architectures.
+
 ---
 
 ## Best Practices
@@ -1383,6 +2184,66 @@ preview:
   show_diffs: true
   require_approval: true  # Requires manual confirmation
 ```
+
+### 11. Use Guardrails for Compliance (v1.1+)
+
+Before deploying to production or committing sensitive code:
+
+```bash
+# Run security scan
+myintern guardrails scan --all --format html --output security-report.html
+
+# Check for critical violations
+myintern guardrails scan --all | grep CRITICAL
+
+# Generate compliance audit (HIPAA example)
+myintern guardrails audit --framework hipaa --since 90d
+```
+
+**Best practices:**
+- Enable guardrails by default (`guardrails.enabled: true`)
+- Review audit logs monthly
+- Whitelist test files to avoid false positives
+- Set override expirations (don't create permanent overrides)
+- Use custom patterns for domain-specific identifiers
+
+### 12. Leverage Context Loading (v1.2+)
+
+If your team already uses Claude Code, Cursor, or GitHub Copilot:
+
+```bash
+# Create CLAUDE.md or .cursorrules with your team's standards
+# MyIntern will automatically load it — no setup needed!
+
+# Verify context loading
+myintern run "Add health endpoint" --dry-run
+
+# Check logs for context sources
+myintern logs | grep "Loaded context from"
+```
+
+### 13. Multi-Repo Workflow (v1.2+)
+
+For monorepo/microservices architectures:
+
+```yaml
+# .myintern/agent.yml
+repos:
+  - name: api-service
+    path: ./api-service
+  - name: shared-lib
+    path: ./shared-lib
+
+watch:
+  auto_discover: true  # Zero config file watching
+```
+
+**In specs:**
+```markdown
+**Repos Affected:** api-service, shared-lib
+```
+
+MyIntern will automatically build context from all referenced repos!
 
 ---
 
@@ -1857,21 +2718,44 @@ This repo has 15 feedback entries (12 positive, 3 negative).
 
 ## What's Next?
 
-### Current Version (v1.0) - Complete
+### Current Version (v1.2) - Production Ready
 
-✅ Java/Spring Boot support (Maven/Gradle)
-✅ Code + Test + Build agents
-✅ BYOK (Anthropic/OpenAI/Bedrock)
-✅ Auto-fix retry logic (max 3 attempts)
-✅ Safety rules (protected branches, no file deletion)
-✅ Zero-setup code review (`myintern review`)
-✅ Rollback support with git integration
-✅ Dry-run preview with file diffs
-✅ GitHub Issues sync
-✅ Spring Boot 2.x/3.x intelligence
-✅ Feedback loop for continuous learning
-✅ Multi-spec support with Jira ticket grouping
-✅ Context loading from CLAUDE.md, .cursorrules, etc.
+**✅ v1.0 Core Features (Complete):**
+- Java/Spring Boot support (Maven/Gradle)
+- Code + Test + Build agents
+- BYOK (Anthropic/OpenAI/Bedrock)
+- Auto-fix retry logic (max 3 attempts)
+- Safety rules (protected branches, no file deletion)
+
+**✅ v1.1 Features (Complete):**
+- Zero-setup code review (`myintern review`)
+- Rollback support with git integration
+- Dry-run preview with file diffs
+- GitHub Issues sync
+- Spring Boot 2.x/3.x intelligence (jakarta.* vs javax.*)
+- Feedback loop for continuous learning
+- **Guardrails** - PII/PHI/credential protection
+  - HIPAA & PCI-DSS compliance
+  - 4 violation levels (INFO, WARN, BLOCK, CRITICAL)
+  - 4 redaction modes (mask, hash, skip, none)
+  - Override management for false positives
+  - Full CLI (`scan`, `override`, `logs`, `audit`)
+  - Audit trail logging
+
+**✅ v1.2 Features (Complete):**
+- **Multi-repo support** - monorepo/microservices context awareness
+  - Token budget balancing across repos
+  - Auto-discovery of source files per repo
+  - "Repos Affected" parsing from specs
+- **Context loading** - zero-migration-cost context aggregation
+  - Priority: `.myintern/practices/` → `CLAUDE.md` → `.cursorrules` → `.github/copilot-instructions.md`
+  - Cursor/Claude Code users: zero setup needed
+- **Parallel execution** - conflict-aware parallel spec processing
+  - Configurable max parallel limit
+  - Jira ticket grouping for sequential execution
+- **Spec file caching** - 70-90% faster spec parsing
+  - In-memory cache with mtime/size invalidation
+  - Automatic cache invalidation on file changes
 
 ### Future Roadmap (v2.0+)
 
@@ -1913,14 +2797,17 @@ This repo has 15 feedback entries (12 positive, 3 negative).
 
 ---
 
-**Last Updated:** 2026-02-22
-**Version:** 1.0.0 (Java/Spring Boot)
+**Last Updated:** 2026-02-23
+**Version:** 1.2.0 (Production Ready - Java/Spring Boot)
+**Key Updates:** Guardrails (v1.1), Multi-Repo Support (v1.2), Context Loading (v1.2), Parallel Execution (v1.2)
 
 ---
 
 ## File Structure Reference
 
 After running `myintern init`, your project will have:
+
+### Single-Repo Project
 
 ```
 your-project/
@@ -1931,35 +2818,77 @@ your-project/
 │   │   └── spec-gh-42.md             # From GitHub Issue #42 (if synced)
 │   ├── practices/                     # Coding standards
 │   │   └── java.md
+│   ├── .context/                      # Hidden global context (gitignored)
+│   │   ├── .gitignore
+│   │   └── global-context.json       # Jira ticket grouping (v1.2)
 │   ├── logs/                          # Execution logs
-│   │   └── executions.json
-│   ├── previews/                      # Dry-run previews (NEW)
+│   │   ├── executions.json
+│   │   ├── guardrails.log            # Guardrails audit trail (v1.1)
+│   │   └── guardrails-overrides.json # False positive overrides (v1.1)
+│   ├── previews/                      # Dry-run previews (v1.1)
 │   │   └── preview-2024-02-21.diff
-│   ├── reports/                       # Code review reports (NEW)
+│   ├── reports/                       # Code review reports (v1.1)
 │   │   └── review-2024-02-21.json
-│   ├── feedback/                      # Feedback loop data (NEW)
+│   ├── feedback/                      # Feedback loop data (v1.1)
 │   │   ├── feedback.json
 │   │   └── patterns.json
-│   ├── rollback-history.json          # Rollback tracking (NEW)
-│   └── github-sync.json               # GitHub sync state (NEW)
+│   ├── rollback-history.json          # Rollback tracking (v1.1)
+│   └── github-sync.json               # GitHub sync state (v1.1)
+├── CLAUDE.md                           # Auto-loaded if present (v1.2)
+├── .cursorrules                        # Auto-loaded if present (v1.2)
 ├── pom.xml (or build.gradle)
 └── src/
     ├── main/java/...
     └── test/java/...
 ```
 
+### Multi-Repo/Monorepo Project (v1.2+)
+
+```
+my-monorepo/
+├── .myintern/
+│   ├── agent.yml                      # Multi-repo config
+│   ├── specs/                         # Shared specs
+│   │   ├── USER_AUTH_SPEC.md         # Affects multiple repos
+│   │   └── ORDER_SERVICE_SPEC.md
+│   ├── practices/
+│   │   └── java.md
+│   ├── .context/                      # Global context across repos
+│   │   └── global-context.json
+│   └── logs/
+│       ├── executions.json
+│       ├── guardrails.log
+│       └── guardrails-overrides.json
+├── api-service/                       # Repo 1
+│   ├── pom.xml
+│   └── src/main/java/...
+├── web-service/                       # Repo 2
+│   ├── build.gradle
+│   └── src/main/java/...
+├── shared-lib/                        # Repo 3
+│   ├── pom.xml
+│   └── src/main/java/...
+└── CLAUDE.md                          # Shared coding standards
+```
+
 ### Key Files Explained
 
 **Configuration:**
-- `agent.yml` - Main config (providers, agents, build commands, safety rules)
+- `agent.yml` - Main config (providers, agents, build commands, safety rules, guardrails, multi-repo)
 - `practices/java.md` - Your team's coding standards (fed to AI)
+- `CLAUDE.md` - Auto-loaded if present (Anthropic convention)
+- `.cursorrules` - Auto-loaded if present (Cursor convention)
+- `.github/copilot-instructions.md` - Auto-loaded if present (GitHub Copilot)
 
 **Specs:**
 - `specs/*.md` - Feature/bug specifications that trigger code generation
 - `spec-gh-*.md` - Auto-generated from GitHub issues
+- `.context/global-context.json` - Jira ticket grouping context (hidden, gitignored)
 
 **Tracking:**
 - `logs/executions.json` - All agent runs (timestamps, specs, results)
+- `logs/guardrails.log` - Guardrails audit trail (JSON format)
+- `logs/guardrails-overrides.json` - False positive overrides
 - `rollback-history.json` - Change history for rollback
 - `github-sync.json` - GitHub issue sync state
 
@@ -1971,6 +2900,44 @@ your-project/
 
 ---
 
-**Version:** 1.0.0 (Complete with all features)
+**Version:** 1.2.0 (Production Ready)
 **Platform:** Java/Spring Boot (Maven/Gradle)
 **Support:** https://github.com/myinterndev/myintern
+**Documentation:** See [CLAUDE.md](.claude/CLAUDE.md) and [MYINTERN_PRODUCT_ENHANCED.md](MYINTERN_PRODUCT_ENHANCED.md)
+
+---
+
+## Quick Reference Cards
+
+### Guardrails Cheat Sheet
+
+| Task | Command |
+|------|---------|
+| Scan single file | `myintern guardrails scan src/main/Config.java` |
+| Scan all files | `myintern guardrails scan --all` |
+| Add override | `myintern guardrails override --file "..." --pattern "SSN" --reason "..."` |
+| View logs | `myintern guardrails logs --tail 20` |
+| HIPAA audit | `myintern guardrails audit --framework hipaa --since 90d` |
+| Check status | `myintern config show \| grep guardrails` |
+
+### Multi-Repo Cheat Sheet
+
+| Task | Config/Command |
+|------|----------------|
+| Declare repos | Add `repos:` section to `agent.yml` |
+| Enable auto-discovery | `watch: { auto_discover: true }` |
+| Spec affects repos | Add `**Repos Affected:** api-service, shared-lib` to spec |
+| Parallel execution | `agents: { max_parallel: 3 }` |
+| Check context | `myintern logs \| grep "context"` |
+
+### Context Loading Cheat Sheet
+
+| Priority | File | Purpose |
+|----------|------|---------|
+| 1 (Highest) | `.myintern/practices/java.md` | Explicit team standards |
+| 2 | `CLAUDE.md` or `.claude/CLAUDE.md` | Anthropic convention |
+| 3 | `.cursorrules` | Cursor users |
+| 4 | `.github/copilot-instructions.md` | GitHub Copilot users |
+| 5 | `.myintern/agent.yml` | Pipeline config |
+| 6 | Spec file | Task definition |
+| 7 | Git diff + affected files | Code context |

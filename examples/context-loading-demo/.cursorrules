@@ -1,0 +1,33 @@
+# Cursor Rules
+
+## Test-Driven Development
+Always write tests first before implementation (TDD)
+Red → Green → Refactor cycle
+
+## Code Quality
+Use descriptive variable and method names (no abbreviations like usr, btn, etc.)
+Keep methods under 20 lines
+Prefer composition over inheritance
+Extract magic numbers to named constants
+Avoid nested ternary operators
+
+## Spring Boot Specifics
+Use constructor injection over field injection (@Autowired on fields)
+Create separate test configuration classes
+Use @SpringBootTest sparingly (prefer @WebMvcTest, @DataJpaTest)
+Always close resources (use try-with-resources)
+
+## Git Workflow
+Commit messages: type(scope): description (e.g., feat(user): add registration)
+Create feature branches: feature/AUTH-123-user-registration
+Squash commits before merging to main
+
+## Performance
+Use pagination for list endpoints (Spring Data Pageable)
+Add database indexes for frequently queried fields
+Use @Transactional(readOnly = true) for read operations
+Avoid N+1 queries (use @EntityGraph or JOIN FETCH)
+
+---
+
+**Cursor AI Editor Preferences** - These rules help maintain consistency when using Cursor for coding.

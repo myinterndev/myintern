@@ -79,10 +79,10 @@ export class CodeAgent extends Agent {
     console.log(chalk.gray(`   Max Parallel: ${this.agentConfig.agents.max_parallel || 3}`));
 
     // Setup watcher
-    const watchPaths = this.agentConfig.watch.paths.map(p => path.join(this.repoPath, p));
+    const watchPaths = (this.agentConfig.watch.paths || []).map(p => path.join(this.repoPath, p));
 
     this.watcher = chokidar.watch(watchPaths, {
-      ignored: this.agentConfig.watch.ignore.map(p => path.join(this.repoPath, p)),
+      ignored: (this.agentConfig.watch.ignore || []).map(p => path.join(this.repoPath, p)),
       persistent: true,
       ignoreInitial: false,
       awaitWriteFinish: {
@@ -95,7 +95,7 @@ export class CodeAgent extends Agent {
     this.watcher.on('change', (filePath) => this.queueSpecFile(filePath));
 
     console.log(chalk.green('\n✅ Code Agent started'));
-    console.log(chalk.gray(`   Watching: ${this.agentConfig.watch.paths.join(', ')}`));
+    console.log(chalk.gray(`   Watching: ${(this.agentConfig.watch.paths || []).join(', ')}`));
     console.log(chalk.gray('   Waiting for spec files...\n'));
   }
 
@@ -113,6 +113,9 @@ export class CodeAgent extends Agent {
     if (!fileName.startsWith('spec-')) {
       return;
     }
+
+    // Invalidate cache for changed file
+    this.specOrchestrator.invalidateSpecCache(filePath);
 
     this.pendingSpecs.add(filePath);
 
@@ -150,7 +153,7 @@ export class CodeAgent extends Agent {
 
       // Create execution plan with conflict detection
       const maxParallel = this.agentConfig.agents.max_parallel || 3;
-      const plan = this.specOrchestrator.createExecutionPlan(specs, maxParallel);
+      const plan = await this.specOrchestrator.createExecutionPlan(specs, maxParallel);
 
       // Display warnings
       if (plan.warnings.length > 0) {
@@ -276,11 +279,19 @@ export class CodeAgent extends Agent {
         return;
       }
 
-      // Step 4: Create feature branch
-      const branchName = `${this.agentConfig.git.branch_prefix}${spec.type}-${fileName.replace('.md', '')}`;
-      const createdBranch = await safety.createFeatureBranch(branchName);
+      // Step 4: Ensure we're on a safe branch (config-driven)
+      const suggestedBranchName = `${spec.type}-${fileName.replace('.md', '')}`;
+      const workingBranch = await safety.ensureSafeBranch({
+        auto_branch: this.agentConfig.git.auto_branch,
+        branch_prefix: this.agentConfig.git.branch_prefix,
+        suggested_name: suggestedBranchName
+      });
 
-      console.log(chalk.green(`   ✓ Working on branch: ${createdBranch}`));
+      if (this.agentConfig.git.auto_branch) {
+        console.log(chalk.green(`   ✓ Working on branch: ${workingBranch}`));
+      } else {
+        console.log(chalk.green(`   ✓ Using current branch: ${workingBranch}`));
+      }
 
       // Step 5: Detect Spring Boot version
       const springBootVersion = await this.springBootDetector.detect();
@@ -362,12 +373,17 @@ export class CodeAgent extends Agent {
       }
 
       // Step 11: Record change for rollback
-      this.rollbackManager.recordChange({
+      const changeRecord = {
         timestamp: new Date().toISOString(),
         spec: fileName,
-        branch: createdBranch,
+        branch: workingBranch,
         files: implementation.files.map((f: any) => f.path)
-      });
+      };
+      this.rollbackManager.recordChange(changeRecord);
+
+      // Get the change ID for potential rollback
+      const recentChanges = this.rollbackManager.getRecentChanges(1);
+      const changeId = recentChanges.length > 0 ? recentChanges[0].id : null;
 
       // Step 12: Build with retry
       if (this.agentConfig.agents.build) {
@@ -401,7 +417,35 @@ export class CodeAgent extends Agent {
 
         if (!buildResult.success) {
           console.log(chalk.red('\n   ❌ Build failed after max retries'));
-          console.log(chalk.gray('   Review the errors and fix manually, or update the spec.'));
+
+          // Auto-rollback (NEW in v1.2)
+          if (this.agentConfig.failure?.auto_rollback !== false && changeId) {
+            console.log(chalk.yellow('   🔄 Rolling back changes to clean state...'));
+
+            const rollbackResult = await this.rollbackManager.rollback(changeId);
+
+            if (rollbackResult.success) {
+              console.log(chalk.green(`   ✓ Rollback complete, working tree clean`));
+              console.log(chalk.gray(`   ${rollbackResult.filesRestored.length} files reverted\n`));
+            } else {
+              console.log(chalk.red(`   ⚠️  Rollback failed: ${rollbackResult.message}\n`));
+            }
+          } else {
+            console.log(chalk.gray('   Auto-rollback disabled, files left in current state'));
+          }
+
+          // Log failure for `myintern status` command
+          this.saveLog({
+            timestamp: new Date().toISOString(),
+            spec: fileName,
+            branch: workingBranch,
+            status: 'failed',
+            files_changed: implementation.files.length,
+            build_result: 'failed',
+            error: buildResult.error || 'Build failed after 3 retries',
+            retry_count: 3
+          });
+
           return;
         }
 
@@ -425,23 +469,39 @@ export class CodeAgent extends Agent {
 
       // Step 11: Summary
       console.log(chalk.green(`\n✨ Implementation complete!`));
-      console.log(chalk.gray(`   Branch: ${createdBranch}`));
+      console.log(chalk.gray(`   Branch: ${workingBranch}`));
       console.log(chalk.gray(`   Files: ${implementation.files.length} created/modified`));
       console.log(chalk.gray(`   Commit: ${implementation.commit_message}\n`));
 
-      // Save to logs
+      // Save to logs with success status
       this.saveLog({
         timestamp: new Date().toISOString(),
         spec: fileName,
-        branch: createdBranch,
-        files: implementation.files.length,
-        commit_message: implementation.commit_message,
-        summary: implementation.summary
+        branch: workingBranch,
+        status: 'success',
+        files_changed: implementation.files.length,
+        build_result: 'passed',
+        tests_generated: this.agentConfig.agents.test ? implementation.files.filter((f: any) => f.path.includes('Test')).length : undefined,
+        retry_count: 0
       });
 
     } catch (error: any) {
       console.log(chalk.red(`\n   ❌ Error: ${error.message}`));
       this.log(`Error processing spec: ${error.message}`, 'error');
+
+      // Save to logs with failed status
+      const fileName = path.basename(filePath);
+      const safety = new SafetyRules(this.repoPath, this.agentConfig.git.protected_branches);
+      const currentBranch = await safety.getCurrentBranch();
+
+      this.saveLog({
+        timestamp: new Date().toISOString(),
+        spec: fileName,
+        branch: currentBranch,
+        status: 'failed',
+        error: error.message,
+        retry_count: 0
+      });
     }
   }
 
@@ -552,7 +612,7 @@ CRITICAL:
   }
 
   /**
-   * Save execution log
+   * Save execution log with status tracking
    */
   private saveLog(log: any): void {
     const logsDir = path.join(this.repoPath, '.myintern', 'logs');
@@ -561,13 +621,22 @@ CRITICAL:
     }
 
     const logsFile = path.join(logsDir, 'executions.json');
-    let logs: any[] = [];
+    let logsData: { executions: any[] } = { executions: [] };
 
     if (fs.existsSync(logsFile)) {
-      logs = JSON.parse(fs.readFileSync(logsFile, 'utf-8'));
+      const content = fs.readFileSync(logsFile, 'utf-8');
+      try {
+        logsData = JSON.parse(content);
+        // Handle legacy format (array instead of object)
+        if (Array.isArray(logsData)) {
+          logsData = { executions: logsData };
+        }
+      } catch (error) {
+        console.log(chalk.yellow('⚠️  Failed to parse executions.json, creating new file'));
+      }
     }
 
-    logs.push(log);
-    fs.writeFileSync(logsFile, JSON.stringify(logs, null, 2));
+    logsData.executions.push(log);
+    fs.writeFileSync(logsFile, JSON.stringify(logsData, null, 2));
   }
 }

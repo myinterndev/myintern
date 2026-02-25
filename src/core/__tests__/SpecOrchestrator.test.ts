@@ -447,7 +447,7 @@ Password reset confirmation
       fs.writeFileSync(path.join(specsDir, 'spec-reset-confirm.md'), spec5, 'utf-8');
     });
 
-    it('should detect file conflicts between different Jira groups', () => {
+    it('should detect file conflicts between different Jira groups', async () => {
       const specs = orchestrator.loadAllSpecs();
       const groups = orchestrator.groupSpecsByJira(specs);
 
@@ -459,7 +459,7 @@ Password reset confirmation
       expect(group502).toBeDefined();
 
       // Both should touch UserService.java - this will be detected in execution plan
-      const plan = orchestrator.createExecutionPlan(specs, 3);
+      const plan = await orchestrator.createExecutionPlan(specs, 3);
 
       // Groups with conflicts should be in sequential groups
       expect(plan.sequentialGroups.length).toBeGreaterThan(0);
@@ -545,9 +545,9 @@ Feature C
       fs.writeFileSync(path.join(specsDir, 'spec-feature-c.md'), spec3, 'utf-8');
     });
 
-    it('should create execution plan with parallel groups', () => {
+    it('should create execution plan with parallel groups', async () => {
       const specs = orchestrator.loadAllSpecs();
-      const plan = orchestrator.createExecutionPlan(specs, 3);
+      const plan = await orchestrator.createExecutionPlan(specs, 3);
 
       expect(plan).toBeDefined();
       expect(plan.parallelGroups).toBeDefined();
@@ -558,9 +558,9 @@ Feature C
       expect(plan.parallelGroups.length).toBeGreaterThan(0);
     });
 
-    it('should respect max_parallel limit', () => {
+    it('should respect max_parallel limit', async () => {
       const specs = orchestrator.loadAllSpecs();
-      const plan = orchestrator.createExecutionPlan(specs, 2); // Max 2 parallel
+      const plan = await orchestrator.createExecutionPlan(specs, 2); // Max 2 parallel
 
       // Each batch should have at most 2 groups
       for (const batch of plan.parallelGroups) {
@@ -568,7 +568,7 @@ Feature C
       }
     });
 
-    it('should warn when many specs lack Jira tickets', () => {
+    it('should warn when many specs lack Jira tickets', async () => {
       // Create 6 specs without Jira tickets
       for (let i = 1; i <= 6; i++) {
         const spec = `# Feature: NoJira${i}
@@ -585,14 +585,14 @@ Test ${i}
       }
 
       const specs = orchestrator.loadAllSpecs();
-      const plan = orchestrator.createExecutionPlan(specs, 3);
+      const plan = await orchestrator.createExecutionPlan(specs, 3);
 
       // Should have warning about missing Jira tickets
-      const hasJiraWarning = plan.warnings.some(w => w.includes('Jira tickets'));
+      const hasJiraWarning = plan.warnings.some((w: string) => w.includes('Jira tickets'));
       expect(hasJiraWarning).toBe(true);
     });
 
-    it('should warn about file conflicts', () => {
+    it('should warn about file conflicts', async () => {
       // Create 2 specs that conflict
       const spec1 = `# Feature: Conflict A
 **Jira:** JIRA-700
@@ -628,10 +628,10 @@ Test B
       fs.writeFileSync(path.join(specsDir, 'spec-conflict-b.md'), spec2, 'utf-8');
 
       const specs = orchestrator.loadAllSpecs();
-      const plan = orchestrator.createExecutionPlan(specs, 3);
+      const plan = await orchestrator.createExecutionPlan(specs, 3);
 
       // Should have warning about conflicts
-      const hasConflictWarning = plan.warnings.some(w => w.includes('conflict'));
+      const hasConflictWarning = plan.warnings.some((w: string) => w.includes('conflict'));
       expect(hasConflictWarning).toBe(true);
     });
   });

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { SpecFile, SpecParser } from './SpecParser';
+import { SemanticConflictDetector } from './SemanticConflictDetector';
 
 /**
  * Global context for a Jira ticket (stored in hidden .context folder)
@@ -51,7 +52,7 @@ export class SpecOrchestrator {
   constructor(private repoPath: string) {
     this.contextDir = path.join(repoPath, '.myintern', '.context');
     this.contextFile = path.join(this.contextDir, 'global-context.json');
-    this.parser = new SpecParser();
+    this.parser = new SpecParser(); // Reuse single parser instance with cache
 
     // Ensure hidden context directory exists
     if (!fs.existsSync(this.contextDir)) {
@@ -63,6 +64,24 @@ export class SpecOrchestrator {
     if (!fs.existsSync(gitignorePath)) {
       fs.writeFileSync(gitignorePath, '*\n!.gitignore\n', 'utf-8');
     }
+  }
+
+  /**
+   * Invalidate cache for a spec file that changed
+   * Call this when a spec file is modified
+   *
+   * @param filePath Absolute path to spec file
+   */
+  invalidateSpecCache(filePath: string): void {
+    this.parser.invalidateCache(filePath);
+  }
+
+  /**
+   * Get parser cache statistics
+   * Useful for monitoring performance
+   */
+  getCacheStats(): { hits: number; misses: number; hitRate: number; size: number } {
+    return this.parser.getCacheStats();
   }
 
   /**
@@ -110,9 +129,12 @@ export class SpecOrchestrator {
   /**
    * Detect file conflicts across multiple groups
    * Returns pairs of groups that have overlapping files
+   *
+   * ENHANCED in v1.2: Now uses SemanticConflictDetector for method-level detection
    */
-  private detectConflictsBetweenGroups(groups: SpecGroup[]): Map<SpecGroup, Set<SpecGroup>> {
+  private async detectConflictsBetweenGroups(groups: SpecGroup[]): Promise<Map<SpecGroup, Set<SpecGroup>>> {
     const conflictMap = new Map<SpecGroup, Set<SpecGroup>>();
+    const semanticDetector = new SemanticConflictDetector(this.repoPath);
 
     for (let i = 0; i < groups.length; i++) {
       for (let j = i + 1; j < groups.length; j++) {
@@ -122,19 +144,26 @@ export class SpecOrchestrator {
         const filesA = this.getAllFilesFromGroup(groupA);
         const filesB = this.getAllFilesFromGroup(groupB);
 
-        // Check for overlapping files
+        // Check for overlapping files (basic file-level detection)
         const hasConflict = Array.from(filesA).some((file: string) => filesB.has(file));
 
         if (hasConflict) {
-          if (!conflictMap.has(groupA)) {
-            conflictMap.set(groupA, new Set());
-          }
-          if (!conflictMap.has(groupB)) {
-            conflictMap.set(groupB, new Set());
-          }
+          // Use semantic conflict detector for deeper analysis
+          const allSpecs = [...groupA.specs, ...groupB.specs];
+          const semanticConflicts = await semanticDetector.detectConflicts(allSpecs);
 
-          conflictMap.get(groupA)!.add(groupB);
-          conflictMap.get(groupB)!.add(groupA);
+          // Only mark as conflict if semantic conflicts detected
+          if (semanticConflicts.length > 0) {
+            if (!conflictMap.has(groupA)) {
+              conflictMap.set(groupA, new Set());
+            }
+            if (!conflictMap.has(groupB)) {
+              conflictMap.set(groupB, new Set());
+            }
+
+            conflictMap.get(groupA)!.add(groupB);
+            conflictMap.get(groupB)!.add(groupA);
+          }
         }
       }
     }
@@ -406,7 +435,7 @@ ${context.context}
    * @param maxParallel - Maximum number of parallel executions (from config)
    * @returns ExecutionPlan with parallel batches and warnings
    */
-  createExecutionPlan(specs: SpecFile[], maxParallel: number = 3): ExecutionPlan {
+  async createExecutionPlan(specs: SpecFile[], maxParallel: number = 3): Promise<ExecutionPlan> {
     const warnings: string[] = [];
     const groups = this.groupSpecsByJira(specs);
 
@@ -423,8 +452,8 @@ ${context.context}
       );
     }
 
-    // Detect conflicts between groups
-    const conflictMap = this.detectConflictsBetweenGroups(groups);
+    // Detect conflicts between groups (with semantic analysis)
+    const conflictMap = await this.detectConflictsBetweenGroups(groups);
 
     // Separate groups with and without conflicts
     const conflictingGroups = Array.from(conflictMap.keys());

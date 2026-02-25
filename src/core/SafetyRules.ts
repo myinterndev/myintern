@@ -147,9 +147,56 @@ export class SafetyRules {
   }
 
   /**
-   * Create a safe feature branch for changes
+   * Get current branch name
    */
-  async createFeatureBranch(branchName: string): Promise<string> {
+  async getCurrentBranch(): Promise<string> {
+    const status = await this.git.status();
+    return status.current || '';
+  }
+
+  /**
+   * Check if a branch is protected
+   */
+  isProtectedBranchName(branchName: string): boolean {
+    return this.protectedBranches.includes(branchName);
+  }
+
+  /**
+   * Ensure we're on a safe branch for modifications
+   * - If auto_branch: true → create/switch to feature branch
+   * - If auto_branch: false → check current branch is not protected
+   */
+  async ensureSafeBranch(options: {
+    auto_branch: boolean;
+    branch_prefix?: string;
+    suggested_name?: string;
+  }): Promise<string> {
+    const currentBranch = await this.getCurrentBranch();
+
+    if (options.auto_branch) {
+      // Workflow B: Auto-create branch
+      if (!options.branch_prefix || !options.suggested_name) {
+        throw new Error('branch_prefix and suggested_name required when auto_branch is enabled');
+      }
+
+      const branchName = `${options.branch_prefix}${options.suggested_name}`;
+      return await this.createFeatureBranch(branchName);
+    } else {
+      // Workflow A: Use current branch, block if protected
+      if (this.isProtectedBranchName(currentBranch)) {
+        throw new Error(
+          `Cannot modify protected branch: ${currentBranch}\n` +
+          `Create a feature branch first: git checkout -b feature/your-feature`
+        );
+      }
+      return currentBranch;
+    }
+  }
+
+  /**
+   * Create a safe feature branch for changes (internal helper)
+   */
+  private async createFeatureBranch(branchName: string): Promise<string> {
     // Ensure branch name is safe
     const safeBranchName = branchName.replace(/[^a-zA-Z0-9_\/-]/g, '-');
 
