@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { CodeAgent } from '../../agents/CodeAgent';
 import { ConfigManager } from '../../core/ConfigManager';
 
-export async function startCommand(options?: { agent?: string; foreground?: boolean }) {
+export async function startCommand(options?: { agent?: string; foreground?: boolean; verbose?: boolean }) {
   console.log(chalk.blue.bold('\n🚀 Starting MyIntern Agent (Java/Spring Boot)\n'));
 
   // Check if initialized
@@ -15,7 +15,7 @@ export async function startCommand(options?: { agent?: string; foreground?: bool
 
   try {
     // Start Code Agent
-    const codeAgent = new CodeAgent();
+    const codeAgent = new CodeAgent({ verbose: options?.verbose });
     await codeAgent.start();
 
     console.log(chalk.gray('Press Ctrl+C to stop\n'));

@@ -2,6 +2,7 @@ import { AIProvider } from './AIProvider';
 import { AnthropicProvider } from './AnthropicProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { BedrockProvider } from './BedrockProvider';
+import { ClaudeCliProvider } from './ClaudeCliProvider';
 import { AgentConfig } from '../../core/ConfigManager';
 
 /**
@@ -16,10 +17,12 @@ export class AIProviderFactory {
 
     switch (provider) {
       case 'anthropic':
-        if (!api_key) {
-          throw new Error('API key is required for Anthropic provider');
-        }
+        // api_key is optional - SDK will auto-discover from ANTHROPIC_API_KEY env var
         return new AnthropicProvider(api_key, model);
+
+      case 'claude-cli':
+        // Uses Claude Code CLI with OAuth - no API key needed
+        return new ClaudeCliProvider(model);
 
       case 'openai':
         if (!api_key) {

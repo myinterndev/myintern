@@ -382,11 +382,11 @@ export class SpecOrchestrator {
   }
 
   /**
-   * Get pending specs (have TODO/PENDING markers)
+   * Get pending specs (have TODO/PENDING markers or not yet successfully completed)
    */
   getPendingSpecs(): SpecFile[] {
     const allSpecs = this.loadAllSpecs();
-    return allSpecs.filter(spec => this.parser.hasPendingWork(spec));
+    return allSpecs.filter(spec => this.parser.hasPendingWork(spec, this.repoPath));
   }
 
   /**

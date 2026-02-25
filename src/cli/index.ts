@@ -15,13 +15,14 @@ import { githubCommand } from './commands/github';
 import { importSpeckit } from './commands/import-speckit';
 import { guardrailsCommand } from './commands/guardrails';
 import { diffCommand } from './commands/diff';
+import { runCommand } from './commands/run';
 
 const program = new Command();
 
 program
   .name('myintern')
   .description('Your AI Junior Developer for Java/Spring Boot Projects')
-  .version('1.0.0');
+  .version('1.2.0');
 
 program
   .command('init')
@@ -29,10 +30,17 @@ program
   .action(initCommand);
 
 program
+  .command('run <task>')
+  .description('Zero-config: Run a task immediately (auto-detects language, auth, context)')
+  .option('-y, --yes', 'Auto-approve changes without confirmation')
+  .action(runCommand);
+
+program
   .command('start')
   .description('Start MyIntern agents')
   .option('-a, --agent <name>', 'Start specific agent (code, test, build, review)')
   .option('-f, --foreground', 'Run in foreground (see logs)')
+  .option('-v, --verbose', 'Show verbose Maven/build output')
   .action(startCommand);
 
 program

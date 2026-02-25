@@ -8,7 +8,10 @@ export class AnthropicProvider implements AIProvider {
   private client: Anthropic;
   private model: string;
 
-  constructor(apiKey: string, model: string = 'claude-sonnet-4-5-20250929') {
+  constructor(apiKey?: string, model: string = 'claude-sonnet-4-5-20250929') {
+    // If no apiKey provided, SDK will auto-discover from:
+    // 1. ANTHROPIC_API_KEY env var
+    // 2. Claude CLI OAuth session (if available)
     this.client = new Anthropic({ apiKey });
     this.model = model;
   }

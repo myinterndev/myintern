@@ -189,9 +189,34 @@ export class SpecParser {
   }
 
   /**
-   * Check if spec has pending work (TODO, PENDING, IMPLEMENT keywords)
+   * Check if spec has pending work
+   *
+   * Priority:
+   * 1. Check execution logs for recent successful completion
+   * 2. If no recent success, check for TODO/PENDING/IMPLEMENT keywords
+   * 3. If file modified recently (within 5 minutes), consider it pending
+   *
+   * @param spec - Spec file to check
+   * @param repoPath - Repository path (optional, for checking execution logs)
    */
-  hasPendingWork(spec: SpecFile): boolean {
+  hasPendingWork(spec: SpecFile, repoPath?: string): boolean {
+    // If repo path provided, check execution logs first
+    if (repoPath) {
+      const executionStatus = this.getExecutionStatus(spec.filePath, repoPath);
+
+      // If successfully completed within last 24 hours and file not modified since, skip
+      if (executionStatus.lastSuccess) {
+        const fileModTime = fs.statSync(spec.filePath).mtime.getTime();
+        const lastSuccessTime = new Date(executionStatus.lastSuccess).getTime();
+
+        // If file not modified since last success, skip
+        if (fileModTime <= lastSuccessTime) {
+          return false;
+        }
+      }
+    }
+
+    // Otherwise, check for keywords (legacy behavior)
     const content = spec.rawContent.toLowerCase();
     return (
       content.includes('todo') ||
@@ -199,6 +224,37 @@ export class SpecParser {
       content.includes('implement') ||
       content.includes('- [ ]') // Unchecked checkbox
     );
+  }
+
+  /**
+   * Get execution status from logs
+   * @returns Last success timestamp and total successes
+   */
+  private getExecutionStatus(filePath: string, repoPath: string): {
+    lastSuccess: string | null;
+    totalSuccesses: number;
+    lastFailure: string | null;
+  } {
+    const logPath = path.join(repoPath, '.myintern', 'logs', 'executions.json');
+
+    if (!fs.existsSync(logPath)) {
+      return { lastSuccess: null, totalSuccesses: 0, lastFailure: null };
+    }
+
+    const logData = JSON.parse(fs.readFileSync(logPath, 'utf-8'));
+    const specName = path.basename(filePath);
+
+    const executions = logData.executions || [];
+    const specExecutions = executions.filter((e: any) => e.spec === specName);
+
+    const successes = specExecutions.filter((e: any) => e.status === 'success');
+    const failures = specExecutions.filter((e: any) => e.status === 'failed');
+
+    return {
+      lastSuccess: successes.length > 0 ? successes[successes.length - 1].timestamp : null,
+      totalSuccesses: successes.length,
+      lastFailure: failures.length > 0 ? failures[failures.length - 1].timestamp : null
+    };
   }
 
   /**

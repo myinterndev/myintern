@@ -6,6 +6,14 @@
   "bin": {
     "myintern": "dist/cli/index.js"
   },
+  "files": [
+    "dist/**/*",
+    "templates/**/*",
+    "docs/**/*",
+    "examples/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/cli/index.ts",
