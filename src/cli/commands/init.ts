@@ -128,8 +128,11 @@ export async function initCommand() {
 
     git: {
       protected_branches: ['main', 'master', 'production'],
+      auto_branch: false,         // User manages branches by default
+      branch_prefix: 'myintern/', // Used only if auto_branch: true
       auto_commit: false,
-      branch_prefix: 'myintern/'
+      auto_pr: false,             // User creates PRs manually by default
+      pr_base_branch: 'main'
     },
 
     safety: {

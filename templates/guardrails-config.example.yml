@@ -1,0 +1,73 @@
+# MyIntern Guardrails Configuration
+# Prevents sending sensitive data (PII, PHI, credentials) to LLM
+
+version: "1.1"
+
+guardrails:
+  # Enable/disable guardrails (default: true for production)
+  enabled: true
+
+  # Redaction mode: mask | hash | skip | none
+  # - mask: Replace with ***REDACTED***
+  # - hash: Replace with SHA256 hash
+  # - skip: Skip entire file
+  # - none: Block without redaction
+  mode: mask
+
+  # Stop execution on critical violations (default: true)
+  stopOnCritical: true
+
+  # Detection categories
+  categories:
+    pii: true          # SSN, credit cards, phone numbers
+    phi: true          # Medical records, patient IDs (HIPAA compliance)
+    credentials: true  # API keys, passwords, private keys
+    custom: false      # User-defined patterns
+
+  # Custom patterns (optional)
+  customPatterns:
+    - name: "Internal Employee ID"
+      regex: "\\bEMP-\\d{6}\\b"
+      level: warn       # info | warn | block | critical
+      category: custom
+      description: "Company employee identifier"
+
+    - name: "Proprietary Algorithm"
+      regex: "ALGORITHM_SECRET_[A-Z0-9]+"
+      level: block
+      category: custom
+      description: "Internal trade secret marker"
+
+  # Whitelist: Skip scanning these files (glob patterns)
+  whitelist:
+    - "**/*.test.java"           # Test files often have dummy data
+    - "**/test-data/**"          # Test fixtures
+    - "**/.myintern/practices/*" # Practice files are reviewed separately
+    - "**/README.md"
+
+# Example output when violations detected:
+#
+# ⚠️  Guardrails: 3 violations detected (redacted)
+#    - PII: 1
+#    - CREDENTIALS: 2
+#
+# 📄 src/main/java/com/example/UserService.java
+#   🚫 Line 42: Credit Card (pii)
+#   🔴 Line 67: AWS Access Key (credential)
+#
+# ✅ Files sanitized. Safe to send to LLM.
+
+# Override false positives:
+#
+# If a violation is incorrectly flagged (false positive), you can override it:
+#
+# myintern guardrails override \
+#   --file "src/test/UserServiceTest.java" \
+#   --pattern "Credit Card" \
+#   --reason "Test fixture with dummy card numbers" \
+#   --expires "2026-12-31"
+#
+# Overrides are stored in .myintern/logs/guardrails-overrides.json
+
+# Audit trail:
+# All violations are logged to .myintern/logs/guardrails.log for compliance

@@ -13,6 +13,8 @@ import { fixCommand } from './commands/fix';
 import { rollbackCommand } from './commands/rollback';
 import { githubCommand } from './commands/github';
 import { importSpeckit } from './commands/import-speckit';
+import { guardrailsCommand } from './commands/guardrails';
+import { diffCommand } from './commands/diff';
 
 const program = new Command();
 
@@ -41,8 +43,16 @@ program
 
 program
   .command('status')
-  .description('Show status of MyIntern agents')
+  .description('Show execution status of specs')
+  .option('--failed', 'Show only failed specs')
+  .option('--json', 'Output in JSON format')
   .action(statusCommand);
+
+program
+  .command('diff')
+  .description('Preview changes for a spec without applying them')
+  .requiredOption('--spec <name>', 'Spec file name (e.g., spec-001.md or spec-001)')
+  .action(diffCommand);
 
 program
   .command('chat')
@@ -91,5 +101,6 @@ program
   .action(githubCommand);
 
 program.addCommand(importSpeckit);
+program.addCommand(guardrailsCommand);
 
 program.parse();

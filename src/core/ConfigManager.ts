@@ -29,6 +29,13 @@ export const SUPPORTED_MODELS = {
   ]
 } as const;
 
+export interface RepoConfig {
+  name: string;
+  path: string;
+  language?: string; // java, typescript, python, etc.
+  build_tool?: 'maven' | 'gradle' | 'npm' | 'yarn' | 'pip' | 'poetry';
+}
+
 export interface AgentConfig {
   version: string;
 
@@ -43,6 +50,9 @@ export interface AgentConfig {
     aws_access_key_id?: string; // Alternative to profile: explicit AWS credentials
     aws_secret_access_key?: string; // Alternative to profile: explicit AWS credentials
   };
+
+  // Multi-repo support (optional - for monorepo/microservices)
+  repos?: RepoConfig[];
 
   // Java/Spring Boot specific settings
   java: {
@@ -60,8 +70,9 @@ export interface AgentConfig {
 
   // Watch configuration
   watch: {
-    paths: string[];
-    ignore: string[];
+    auto_discover?: boolean; // Auto-discover source files in repos (default: true)
+    paths?: string[];        // Manual paths (optional if auto_discover is true)
+    ignore: string[];        // Ignore patterns (glob or regex)
     debounce_ms: number;
   };
 
@@ -78,8 +89,12 @@ export interface AgentConfig {
   // Git configuration
   git: {
     protected_branches: string[];
+    auto_branch: boolean;         // NEW: Enable auto branch creation (default: false)
+    branch_prefix?: string;       // Used only if auto_branch: true
     auto_commit: boolean;
-    branch_prefix: string;
+    auto_pr: boolean;             // NEW: Enable auto PR creation (default: false)
+    pr_base_branch?: string;      // NEW: Which branch to PR against (default: main)
+    pr_template?: string;         // NEW: PR description template
   };
 
   // Code generation safety
@@ -107,6 +122,34 @@ export interface AgentConfig {
     sync_labels: string[];     // Labels to sync (e.g., ['myintern', 'enhancement'])
     auto_close: boolean;       // Auto-close issues when specs complete
     assignee_filter?: string;  // Only sync issues assigned to this user
+  };
+
+  // Guardrails - Sensitive data detection (PII, PHI, credentials)
+  guardrails?: {
+    enabled: boolean;          // Enable/disable sensitive data detection
+    mode: 'mask' | 'hash' | 'skip' | 'none'; // Redaction strategy
+    stopOnCritical: boolean;   // Stop execution on critical violations
+    categories: {
+      pii: boolean;            // SSN, credit cards, phone numbers
+      phi: boolean;            // Medical records, patient IDs (HIPAA)
+      credentials: boolean;    // API keys, passwords, private keys
+      custom: boolean;         // User-defined patterns
+    };
+    customPatterns?: Array<{
+      name: string;
+      regex: string;           // Regex pattern as string (will be converted to RegExp)
+      level: 'info' | 'warn' | 'block' | 'critical';
+      category: 'pii' | 'phi' | 'credential' | 'custom';
+      description?: string;
+    }>;
+    whitelist?: string[];      // File paths to skip scanning (glob patterns)
+  };
+
+  // Failure handling (NEW in v1.2)
+  failure?: {
+    auto_rollback?: boolean;        // Auto-rollback files after 3 failed retries (default: true)
+    notify_on_failure?: boolean;    // Log failures to console (default: true)
+    max_failed_specs?: number;      // Stop watching after N consecutive failures (default: 5)
   };
 }
 
@@ -271,9 +314,16 @@ export class ConfigManager {
       }
     }
 
-    // Validate watch paths
-    if (!cfg.watch || !Array.isArray(cfg.watch.paths) || cfg.watch.paths.length === 0) {
-      errors.push('watch.paths must be a non-empty array');
+    // Validate watch paths (optional if auto_discover is enabled)
+    if (!cfg.watch) {
+      errors.push('Missing "watch" configuration');
+    } else {
+      const hasAutoDis = cfg.watch.auto_discover === true;
+      const hasPaths = Array.isArray(cfg.watch.paths) && cfg.watch.paths.length > 0;
+
+      if (!hasAutoDis && !hasPaths) {
+        errors.push('watch.paths must be a non-empty array when auto_discover is disabled');
+      }
     }
 
     // Validate build config
@@ -317,8 +367,9 @@ export class ConfigManager {
       },
 
       watch: {
-        paths: ['.myintern/specs/**/*.md', 'src/**/*.java'],
-        ignore: ['target/', '.git/', '.myintern/logs/'],
+        auto_discover: true,
+        paths: ['.myintern/specs/**/*.md'],
+        ignore: ['target/', '.git/', '.myintern/logs/', 'node_modules/', 'build/', 'dist/', '**/*.class'],
         debounce_ms: 2000
       },
 
@@ -333,8 +384,11 @@ export class ConfigManager {
 
       git: {
         protected_branches: ['main', 'master', 'production'],
+        auto_branch: false,         // User manages branches by default
+        branch_prefix: 'myintern/', // Used only if auto_branch: true
         auto_commit: false,
-        branch_prefix: 'myintern/'
+        auto_pr: false,             // User creates PRs manually by default
+        pr_base_branch: 'main'
       },
 
       safety: {
@@ -357,6 +411,30 @@ export class ConfigManager {
         enabled: false,
         sync_labels: ['myintern'],
         auto_close: false
+      },
+
+      guardrails: {
+        enabled: true,
+        mode: 'mask',
+        stopOnCritical: true,
+        categories: {
+          pii: true,
+          phi: true,
+          credentials: true,
+          custom: false
+        },
+        whitelist: [
+          '**/*.test.java',
+          '**/test-data/**',
+          '**/.myintern/practices/*',
+          '**/README.md'
+        ]
+      },
+
+      failure: {
+        auto_rollback: true,        // Auto-rollback after 3 failed retries
+        notify_on_failure: true,    // Log failures
+        max_failed_specs: 5         // Stop watching after 5 consecutive failures
       }
     };
   }
