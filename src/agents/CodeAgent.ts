@@ -18,6 +18,7 @@ import { DryRunPreview } from '../core/DryRunPreview';
 import { RollbackManager } from '../core/RollbackManager';
 import { FeedbackLoop } from '../core/FeedbackLoop';
 import { SpringBootDetector } from '../core/SpringBootDetector';
+import { AuditLogger } from '../core/AuditLogger';
 
 /**
  * Code Agent - Java/Spring Boot Code Generation
@@ -43,6 +44,7 @@ export class CodeAgent extends Agent {
   private readonly feedbackLoop: FeedbackLoop;
   private readonly springBootDetector: SpringBootDetector;
   private readonly verbose: boolean;
+  private readonly auditLogger: AuditLogger;
 
   constructor(options: { verbose?: boolean } = {}) {
     super('code-agent');
@@ -56,6 +58,7 @@ export class CodeAgent extends Agent {
     this.feedbackLoop = new FeedbackLoop(this.repoPath);
     this.springBootDetector = new SpringBootDetector(this.repoPath);
     this.verbose = options.verbose || false;
+    this.auditLogger = new AuditLogger(this.repoPath);
   }
 
   private pendingSpecs: Set<string> = new Set();
@@ -340,13 +343,37 @@ export class CodeAgent extends Agent {
       // Step 8: Generate code
       console.log(chalk.blue('   🤖 Generating code...'));
 
-      const implementation = await this.aiProvider.generateCode(prompt);
+      const auditId = this.auditLogger.startEntry({
+        spec: fileName,
+        jira_ticket: spec.jiraTicket,
+        prompt,
+        llm_provider: this.agentConfig.llm.provider,
+        llm_model: this.agentConfig.llm.model,
+        git_branch: workingBranch,
+      });
+
+      let implementation: any;
+      try {
+        implementation = await this.aiProvider.generateCode(prompt);
+      } catch (genError: any) {
+        this.auditLogger.completeEntry(auditId, {
+          generated_files: [],
+          status: 'failed',
+          error: genError.message,
+        });
+        throw genError;
+      }
 
       // Convert imports based on Spring Boot version
       implementation.files = implementation.files.map((file: any) => ({
         ...file,
         content: this.springBootDetector.convertImports(file.content, springBootVersion.useJakarta)
       }));
+
+      this.auditLogger.completeEntry(auditId, {
+        generated_files: implementation.files.map((f: any) => f.path),
+        status: 'success',
+      });
 
       console.log(chalk.green(`   ✓ Generated ${implementation.files.length} files`));
       console.log(chalk.gray(`   Summary: ${implementation.summary}`));
@@ -415,7 +442,23 @@ export class CodeAgent extends Agent {
             console.log(chalk.yellow(`   🔧 Attempting auto-fix (attempt ${attempt})...`));
 
             const fixPrompt = this.buildFixPrompt(error, context, implementation);
+
+            const fixAuditId = this.auditLogger.startEntry({
+              spec: fileName,
+              jira_ticket: spec.jiraTicket,
+              prompt: fixPrompt,
+              llm_provider: this.agentConfig.llm.provider,
+              llm_model: this.agentConfig.llm.model,
+              git_branch: workingBranch,
+            });
+
             const fix = await this.aiProvider.generateCode(fixPrompt);
+
+            this.auditLogger.completeEntry(fixAuditId, {
+              generated_files: fix.files.map((f: any) => f.path),
+              status: 'retry',
+              retry_count: attempt,
+            });
 
             // Apply fix
             for (const file of fix.files) {
@@ -445,7 +488,22 @@ export class CodeAgent extends Agent {
             console.log(chalk.gray('   Auto-rollback disabled, files left in current state'));
           }
 
-          // Log failure for `myintern status` command
+          // Log failure for `myintern status` and audit trail
+          const buildFailAuditId = this.auditLogger.startEntry({
+            spec: fileName,
+            jira_ticket: spec.jiraTicket,
+            prompt: '[build-failure-event]',
+            llm_provider: this.agentConfig.llm.provider,
+            llm_model: this.agentConfig.llm.model,
+            git_branch: workingBranch,
+          });
+          this.auditLogger.completeEntry(buildFailAuditId, {
+            generated_files: implementation.files.map((f: any) => f.path),
+            status: 'failed',
+            retry_count: 3,
+            error: buildResult.error || 'Build failed after 3 retries',
+          });
+
           this.saveLog({
             timestamp: new Date().toISOString(),
             spec: fileName,

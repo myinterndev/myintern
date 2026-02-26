@@ -8,6 +8,7 @@ import { AIProviderFactory } from '../../integrations/ai/AIProviderFactory';
 import { ClaudeCliProvider } from '../../integrations/ai/ClaudeCliProvider';
 import { LanguageDetector } from '../../core/LanguageDetector';
 import { ContextFileLoader } from '../../core/ContextFileLoader';
+import { AuditLogger } from '../../core/AuditLogger';
 
 const execAsync = promisify(exec);
 
@@ -173,14 +174,38 @@ export async function runCommand(task: string, options: any) {
 
     console.log(chalk.blue('💭 Sending request to LLM...\n'));
 
-    const result = await aiProvider.generateCode(prompt);
+    const auditLogger = new AuditLogger(repoPath);
+    const auditId = auditLogger.startEntry({
+      spec: `run:${task.slice(0, 60)}`,
+      prompt,
+      llm_provider: auth.provider,
+      llm_model: minimalConfig.llm.model,
+      git_branch: 'HEAD',
+    });
+
+    let result: any;
+    try {
+      result = await aiProvider.generateCode(prompt);
+    } catch (genError: any) {
+      auditLogger.completeEntry(auditId, {
+        generated_files: [],
+        status: 'failed',
+        error: genError.message,
+      });
+      throw genError;
+    }
+
+    auditLogger.completeEntry(auditId, {
+      generated_files: result.files.map((f: { path: string }) => f.path),
+      status: 'success',
+    });
 
     console.log(chalk.green('✅ Code generated successfully!\n'));
     console.log(chalk.bold('Summary:'));
     console.log(result.summary + '\n');
 
     console.log(chalk.bold('Files to create/modify:'));
-    result.files.forEach(f => {
+    result.files.forEach((f: { path: string }) => {
       console.log(chalk.cyan(`  ${f.path}`));
     });
 

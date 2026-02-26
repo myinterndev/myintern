@@ -151,6 +151,21 @@ export interface AgentConfig {
     notify_on_failure?: boolean;    // Log failures to console (default: true)
     max_failed_specs?: number;      // Stop watching after N consecutive failures (default: 5)
   };
+
+  // MCP (Model Context Protocol) integrations (NEW in v1.3)
+  mcp?: {
+    servers?: {
+      jira?: {
+        enabled: boolean;             // Enable Jira MCP integration
+        host: string;                 // Jira instance URL (e.g., "https://yourcompany.atlassian.net")
+        access_token: string;         // Jira API token (use env var: ${JIRA_ACCESS_TOKEN})
+        project_key?: string;         // Default project key (optional)
+        issue_type?: string;          // Default issue type filter (optional)
+        auto_sync?: boolean;          // Auto-sync tickets to specs (optional, default: false)
+        sync_labels?: string[];       // Label filter for sync (optional)
+      };
+    };
+  };
 }
 
 /**
@@ -342,6 +357,25 @@ export class ConfigManager {
       errors.push('build.tool must be "maven" or "gradle" for Java projects');
     }
 
+    // Validate MCP config (optional)
+    if (cfg.mcp?.servers?.jira) {
+      const jira = cfg.mcp.servers.jira;
+
+      if (typeof jira.enabled !== 'boolean') {
+        errors.push('mcp.servers.jira.enabled must be boolean');
+      }
+
+      if (jira.enabled) {
+        if (!jira.host) {
+          errors.push('mcp.servers.jira.host is required when Jira MCP is enabled');
+        }
+
+        if (!jira.access_token) {
+          errors.push('mcp.servers.jira.access_token is required when Jira MCP is enabled');
+        }
+      }
+    }
+
     return {
       valid: errors.length === 0,
       errors
@@ -442,6 +476,18 @@ export class ConfigManager {
         auto_rollback: true,        // Auto-rollback after 3 failed retries
         notify_on_failure: true,    // Log failures
         max_failed_specs: 5         // Stop watching after 5 consecutive failures
+      },
+
+      mcp: {
+        servers: {
+          jira: {
+            enabled: false,                   // Enable when ready to use
+            host: 'localhost',                // MCP server host
+            access_token: '${JIRA_ACCESS_TOKEN}', // Jira API token (use env var)
+            project_key: '',                  // Optional: default project
+            auto_sync: false                  // Optional: auto-sync tickets
+          }
+        }
       }
     };
   }
