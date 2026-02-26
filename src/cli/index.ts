@@ -16,6 +16,9 @@ import { importSpeckit } from './commands/import-speckit';
 import { guardrailsCommand } from './commands/guardrails';
 import { diffCommand } from './commands/diff';
 import { runCommand } from './commands/run';
+import { doctorCommand } from './commands/doctor';
+import { explainCommand } from './commands/explain';
+import { auditCommand } from './commands/audit';
 
 const program = new Command();
 
@@ -41,6 +44,7 @@ program
   .option('-a, --agent <name>', 'Start specific agent (code, test, build, review)')
   .option('-f, --foreground', 'Run in foreground (see logs)')
   .option('-v, --verbose', 'Show verbose Maven/build output')
+  .option('-j, --jira <ticket>', 'Fetch Jira ticket and create spec (e.g., PROJ-123)')
   .action(startCommand);
 
 program
@@ -110,5 +114,32 @@ program
 
 program.addCommand(importSpeckit);
 program.addCommand(guardrailsCommand);
+
+program
+  .command('doctor')
+  .description('Validate environment setup (Java, Maven, API keys, git, config)')
+  .option('--fix', 'Attempt to auto-fix issues (where possible)')
+  .action(doctorCommand);
+
+program
+  .command('explain')
+  .description('Show the exact LLM prompt that would be sent (transparency mode)')
+  .option('--spec <name>', 'Explain prompt for a spec file')
+  .option('--task <task>', 'Explain prompt for a run task')
+  .option('--full', 'Show full prompt without truncation')
+  .option('--json', 'Output as JSON')
+  .action(explainCommand);
+
+program
+  .command('audit')
+  .description('View the immutable audit trail for all LLM-generated code')
+  .option('--spec <name>', 'Filter by spec name or Jira ticket (e.g., PROJ-123)')
+  .option('--file <path>', 'Filter by generated file path')
+  .option('--status <status>', 'Filter by status: success, failed, retry')
+  .option('--limit <n>', 'Max entries to show (default: 50)')
+  .option('--since <date>', 'Show entries since date (e.g., 2025-01-01)')
+  .option('--json', 'Output as raw JSON (machine-readable)')
+  .option('--path', 'Print audit log file path and exit')
+  .action(auditCommand);
 
 program.parse();
