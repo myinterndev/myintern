@@ -29,6 +29,9 @@ MyIntern is an autonomous AI coding agent that lives in your Java/Spring Boot re
 - ✅ **NEW v1.2:** Context loading - auto-loads CLAUDE.md, .cursorrules, etc.
 - ✅ **NEW v1.2:** Parallel execution - conflict-aware parallel spec processing
 - ✅ **NEW v1.2:** Spec file caching - 70-90% faster spec parsing
+- ✅ **NEW v1.2:** Immutable audit trail - full traceability for compliance (HIPAA/PCI-DSS)
+
+Jira MCP integration - fetch tickets and auto-create specs
 
 ---
 
@@ -70,10 +73,12 @@ your-project/
 │   │   └── java.md            # Your team's coding standards
 │   ├── .context/              # Hidden global context (gitignored)
 │   │   └── global-context.json # Jira ticket grouping context
-│   └── logs/                  # Execution logs
-│       ├── executions.json
-│       ├── guardrails.log     # Guardrails audit trail (NEW v1.1)
-│       └── guardrails-overrides.json  # False positive overrides (NEW v1.1)
+│   ├── logs/                  # Execution logs
+│   │   ├── executions.json
+│   │   ├── guardrails.log     # Guardrails audit trail (NEW v1.1)
+│   │   └── guardrails-overrides.json  # False positive overrides (NEW v1.1)
+│   └── audit/                 # Immutable audit trail (v1.2)
+│       └── audit-log.jsonl    # JSONL format, committable for compliance
 ├── pom.xml (or build.gradle)
 └── src/...
 ```
@@ -1355,6 +1360,364 @@ MyIntern guardrails help you meet compliance requirements for:
 
 ---
 
+## Immutable Audit Trail (v1.2+) — Enterprise Compliance
+
+MyIntern tracks **every line of code generated** with a full audit trail that meets HIPAA, PCI-DSS, and SOC 2 requirements.
+
+### Why This Matters
+
+**Enterprise blocker solved:** Fintech, healthtech, and regulated industries require audit trails for AI-generated code:
+- **HIPAA** (healthcare) - Must prove data lineage for patient data
+- **PCI-DSS** (finance) - Must trace code changes for credit card processing
+- **SOC 2** (SaaS) - Must demonstrate accountability for security controls
+
+**Competitive advantage:** GitHub Copilot, Cursor, and Cody are cloud-only and don't provide local audit control. MyIntern runs locally with full audit visibility.
+
+### What Gets Logged
+
+Every LLM call is tracked with an immutable append-only log (`.myintern/audit/audit-log.jsonl`):
+
+```json
+{
+  "audit_id": "1b3f75bac332fee2",
+  "session_id": "aca1b68da035a753",
+  "timestamp": "2026-02-26T04:48:16.437Z",
+  "spec": "spec-user-controller.md",
+  "jira_ticket": "PROJ-123",
+  "llm_provider": "anthropic",
+  "llm_model": "claude-sonnet-4-5-20250929",
+  "prompt_hash": "sha256:db5f43194d0100e9...",
+  "prompt_tokens_estimate": 15234,
+  "generated_files": [
+    "src/main/java/com/example/UserController.java"
+  ],
+  "user": "jagadeesh@company.com",
+  "git_commit": "a8cb5b5",
+  "git_branch": "feature/spec-001",
+  "status": "success",
+  "duration_ms": 4532,
+  "retry_count": 0
+}
+```
+
+**Key fields:**
+- `audit_id` - Unique ID for this LLM call
+- `session_id` - Groups all calls from one `myintern start` session
+- `prompt_hash` - SHA-256 of the exact prompt (for reproducibility)
+- `generated_files` - Every file written, traceable to this call
+- `user` - Git email of the person who ran it
+- `git_commit` - Exact repo state when code was generated
+- `status` - `success` / `failed` / `retry`
+
+### CLI Commands
+
+```bash
+# View recent audit entries (pretty-printed)
+myintern audit
+
+# Filter by spec or Jira ticket
+myintern audit --spec PROJ-123
+myintern audit --spec user-controller
+
+# Find who generated a specific file
+myintern audit --file UserController.java
+
+# Compliance review of failures
+myintern audit --status failed
+
+# Date-range queries
+myintern audit --since 2025-01-01
+myintern audit --limit 100
+
+# Machine-readable JSON (for SIEM/export)
+myintern audit --json > audit-export.json
+myintern audit --json --since 30d > monthly-audit.json
+
+# Get raw log file path
+myintern audit --path
+```
+
+**Example output:**
+
+```
+📋 MyIntern Audit Log (12 entries)
+
+┌─ spec-user-controller.md [1b3f75bac332fee2]
+│  Timestamp : 2026-02-26 04:48:16
+│  Status    : success (4.5s)
+│  Model     : anthropic/claude-sonnet-4-5-20250929
+│  Prompt    : sha256:db5f43194d0100e9ace0d1c85c3e8cb4aa830bde...
+│  Tokens    : ~15,234 (est)
+│  User      : jagadeesh@company.com
+│  Commit    : a8cb5b5 @ feature/spec-001
+│  Jira      : PROJ-123
+│  Files     :
+│    + src/main/java/com/example/UserController.java
+│    + src/main/java/com/example/UserService.java
+└────────────────────────────────────────────────────────
+
+┌─ spec-order-service.md [2c4d85fbdc443gf3]
+│  Timestamp : 2026-02-25 16:23:41
+│  Status    : retry (8.2s)
+│  Model     : anthropic/claude-sonnet-4-5-20250929
+│  Prompt    : sha256:e7f9d1c0211b3f5a...
+│  Tokens    : ~8,912 (est)
+│  User      : jagadeesh@company.com
+│  Commit    : b9dc6c6 @ feature/spec-002
+│  Retries   : 2
+│  Files     :
+│    + src/main/java/com/example/OrderService.java
+└────────────────────────────────────────────────────────
+
+Audit log: /Users/you/project/.myintern/audit/audit-log.jsonl
+```
+
+### Git-Committable for Long-Term Storage
+
+The audit log is **intentionally git-trackable**:
+
+```bash
+# .gitignore excludes .myintern/ EXCEPT audit/
+# Pattern: !.myintern/audit/audit-log.jsonl
+
+git add .myintern/audit/audit-log.jsonl
+git commit -m "audit: record code generation for PROJ-123"
+```
+
+**Why commit it?**
+- Long-term preservation (git history = permanent record)
+- Code review visibility (auditors can see what was generated)
+- Compliance requirement (HIPAA/PCI-DSS need version-controlled audit trails)
+
+### Integration with CI/CD
+
+Export audit data for compliance reporting:
+
+```bash
+# JSON export for quarterly audit
+myintern audit --since 90d --json > q1-2026-audit.json
+
+# Filter by Jira project
+myintern audit --spec HEALTH- --since 180d --json > hipaa-audit.json
+
+# Failed generation report
+myintern audit --status failed --json > incident-report.json
+```
+
+### Compliance Checklist
+
+**HIPAA (Healthcare):**
+- ✅ Every PHI-related code change is logged
+- ✅ Prompt hashes allow reproducibility
+- ✅ User attribution (who generated what)
+- ✅ Timestamp tracking (when was it generated)
+- ✅ Git commit traceability (state of codebase)
+
+**PCI-DSS (Finance):**
+- ✅ Audit trail for payment processing code
+- ✅ Change tracking (generated_files)
+- ✅ Model version tracking (llm_model)
+- ✅ Retry tracking (failure analysis)
+
+**SOC 2 (SaaS):**
+- ✅ Accountability (user field)
+- ✅ Availability (session_id for outage analysis)
+- ✅ Integrity (prompt_hash for verification)
+- ✅ Security (status tracking for failures)
+
+### How It Works (Under the Hood)
+
+1. **Before LLM call**: `auditLogger.startEntry()` captures prompt, spec, git state
+2. **After LLM call**: `auditLogger.completeEntry()` records files generated, status, duration
+3. **Append-only write**: Entry written to `.myintern/audit/audit-log.jsonl` (JSONL format)
+4. **Query anytime**: `auditLogger.query()` supports filters (spec, file, status, date)
+
+**Implementation:**
+- `src/core/AuditLogger.ts` - Core audit logging class
+- `src/cli/commands/audit.ts` - CLI command
+- Hooks in `CodeAgent.ts` and `run.ts` for all code generation paths
+
+### Audit Retention
+
+**Default behavior:**
+- Audit log grows indefinitely (append-only)
+- **No automatic rotation** (compliance requirement)
+- You control retention via git (commit audit log when stable)
+
+**For long-running projects:**
+```bash
+# Archive old entries (manual process)
+cat .myintern/audit/audit-log.jsonl | \
+  grep "2025-" > archive-2025.jsonl
+
+# Keep only current year
+cat .myintern/audit/audit-log.jsonl | \
+  grep "2026-" > audit-log-current.jsonl
+
+mv audit-log-current.jsonl .myintern/audit/audit-log.jsonl
+```
+
+---
+
+## Jira MCP Integration (v1.2+)
+
+MyIntern integrates with Jira via **MCP (Model Context Protocol)** to automatically fetch tickets and create specs.
+
+### Quick Start
+
+```bash
+# 1. Configure in agent.yml
+mcp:
+  servers:
+    jira:
+      enabled: true
+      host: localhost
+      access_token: ${JIRA_ACCESS_TOKEN}
+
+# 2. Set environment variable
+export JIRA_ACCESS_TOKEN=your-jira-api-token
+
+# 3. Fetch ticket and create spec
+myintern start --jira PROJ-123
+
+# MyIntern will:
+# - Connect to Jira MCP server
+# - Fetch ticket PROJ-123
+# - Create .myintern/specs/PROJ-123.md
+# - Watch for changes and generate code
+```
+
+### Configuration
+
+Add to `.myintern/agent.yml`:
+
+```yaml
+mcp:
+  servers:
+    jira:
+      enabled: true
+      host: localhost                    # MCP server host
+      port: 3000                         # Optional: MCP server port (default: 3000)
+      access_token: ${JIRA_ACCESS_TOKEN} # Jira API token (use env var)
+      project_key: PROJ                  # Optional: default project key
+      issue_type: Story                  # Optional: filter by issue type
+      sync_labels: [myintern, backend]   # Optional: label filter
+```
+
+### How It Works
+
+1. **MCP Server**: You run a Jira MCP server separately (localhost or remote)
+2. **Connection Test**: MyIntern tests connection with 5-second timeout
+3. **Ticket Fetch**: Fetches issue via JSON-RPC 2.0 protocol
+4. **Spec Creation**: Converts Jira issue to MyIntern spec format
+5. **Watch Mode**: Continues watching specs for changes
+
+### Spec Format
+
+When you run `myintern start --jira PROJ-123`, it creates:
+
+```markdown
+# STORY: Add user authentication endpoint
+
+**Jira:** PROJ-123
+**Type:** story
+**Priority:** high
+**Labels:** backend, security
+
+## Description
+[Cleaned Jira description with markdown formatting]
+
+## Acceptance Criteria
+- Implement functionality as described
+- Add unit tests with 80%+ coverage
+- Ensure backward compatibility
+
+## Files Likely Affected
+- src/main/java/...
+
+## Notes
+Synced from Jira ticket PROJ-123.
+```
+
+### Console Output
+
+```
+🚀 Starting MyIntern Agent
+
+📋 Fetching Jira ticket: PROJ-123
+
+⋯ Testing MCP server connection...
+✓ Connected to MCP server
+⋯ Fetching issue PROJ-123...
+✓ Fetched: Add user authentication endpoint
+⋯ Creating spec file...
+✓ Spec created: .myintern/specs/PROJ-123.md
+  Type: Story
+  Priority: High
+  Status: To Do
+
+ℹ Watching for changes...
+```
+
+### Error Handling
+
+**Connection timeout:**
+```
+✗ Cannot connect to Jira MCP server: Connection timeout after 5000ms
+ℹ Check host: localhost:3000
+```
+
+**Spec already exists:**
+```
+⚠ Spec already exists: .myintern/specs/PROJ-123.md
+ℹ Watching for changes...
+```
+
+**Ticket not found:**
+```
+✗ Failed to fetch Jira issue PROJ-123: Issue not found
+```
+
+### MCP Protocol
+
+MyIntern uses JSON-RPC 2.0 over TCP:
+
+```json
+// Request
+{
+  "jsonrpc": "2.0",
+  "id": 1234567890,
+  "method": "jira.getIssue",
+  "params": {
+    "issueKey": "PROJ-123",
+    "accessToken": "your-token"
+  }
+}
+
+// Response
+{
+  "jsonrpc": "2.0",
+  "id": 1234567890,
+  "result": {
+    "key": "PROJ-123",
+    "summary": "Add user authentication",
+    "description": "...",
+    "issueType": "Story",
+    "status": "To Do",
+    "priority": "High",
+    "labels": ["backend", "security"],
+    "projectKey": "PROJ"
+  }
+}
+```
+
+**Implementation:**
+- `src/integrations/mcp/JiraMCPClient.ts` - MCP client
+- `src/integrations/mcp/JiraSpecConverter.ts` - Jira → spec converter
+- `src/cli/commands/start.ts` - CLI integration
+
+---
+
 ## Context Loading & Zero-Config Mode (v1.2+)
 
 MyIntern automatically loads coding context from multiple sources, **with zero configuration required**. This is the #1 adoption driver: **60-second time-to-value**.
@@ -1602,11 +1965,21 @@ myintern init
 # Start the agent (watches for spec files)
 myintern start
 
+# NEW v1.2: Fetch Jira ticket and create spec
+myintern start --jira PROJ-123
+
 # Stop the agent
 myintern stop
 
 # Check status
 myintern status
+
+# v1.2: View immutable audit trail
+myintern audit                         # pretty-print recent entries
+myintern audit --spec PROJ-123         # filter by spec/ticket
+myintern audit --file UserController   # find who generated a file
+myintern audit --status failed         # compliance review
+myintern audit --json                  # machine-readable export
 
 # View configuration
 myintern config show
@@ -2938,6 +3311,8 @@ your-project/
 │   ├── feedback/                      # Feedback loop data (v1.1)
 │   │   ├── feedback.json
 │   │   └── patterns.json
+│   ├── audit/                         # Immutable audit trail (v1.2)
+│   │   └── audit-log.jsonl           # JSONL format, git-committable
 │   ├── rollback-history.json          # Rollback tracking (v1.1)
 │   └── github-sync.json               # GitHub sync state (v1.1)
 ├── CLAUDE.md                           # Auto-loaded if present (v1.2)

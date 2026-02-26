@@ -15,6 +15,8 @@ MyIntern is an autonomous AI agent that acts like a **junior software engineer**
 - 🔒 Security & best practice reviews
 - 🛠️ Fix build errors automatically
 - 💬 Ask clarifying questions when needed
+- 📋 Jira MCP integration for ticket-to-spec conversion (NEW v1.2)
+- 🔍 Immutable audit trail for compliance (v1.2)
 
 ## Quick Start
 
@@ -81,7 +83,9 @@ MyIntern detects the spec, analyzes your codebase patterns, generates code, and 
 ```bash
 myintern init              # Initialize in project
 myintern start             # Start all agents
+myintern start --jira PROJ-123  # Fetch Jira ticket & create spec (v1.2)
 myintern status            # Check status
+myintern audit             # View immutable audit trail (v1.2)
 myintern chat              # Interactive mode
 myintern logs --follow     # View logs
 ```
