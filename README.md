@@ -3,7 +3,7 @@
 **Your AI Junior Developer for Java/Spring Boot Projects**
 
 [![npm version](https://img.shields.io/npm/v/myintern.svg)](https://www.npmjs.com/package/myintern)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/myintern)
 [![Website](https://img.shields.io/badge/Website-myintern.dev-blue)](https://www.myintern.dev/)

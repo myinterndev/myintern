@@ -152,7 +152,7 @@ export interface AgentConfig {
     max_failed_specs?: number;      // Stop watching after N consecutive failures (default: 5)
   };
 
-  // MCP (Model Context Protocol) integrations (NEW in v1.3)
+  // MCP (Model Context Protocol) integrations (NEW in v1.2)
   mcp?: {
     servers?: {
       jira?: {
