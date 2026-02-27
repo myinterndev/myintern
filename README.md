@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/myintern)
+[![Website](https://img.shields.io/badge/Website-myintern.dev-blue)](https://www.myintern.dev/)
 
 MyIntern is an autonomous AI agent that acts like a **junior software engineer** for Java and Spring Boot projects. It generates production-ready code from specifications, writes comprehensive tests, and helps maintain code quality—all running locally on your machine.
 
