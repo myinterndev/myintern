@@ -25,7 +25,7 @@ const program = new Command();
 program
   .name('myintern')
   .description('Your AI Junior Developer for Java/Spring Boot Projects')
-  .version('1.2.0');
+  .version('1.2.3');
 
 program
   .command('init')

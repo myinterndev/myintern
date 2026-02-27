@@ -77,7 +77,7 @@ MyIntern detects the spec, analyzes your codebase patterns, generates code, and 
 **Local-First & Secure:**
 - Runs on your machine
 - Free with Claude Pro/Max subscription, or bring your own API key
-- Open source MIT license
+- Business Source License 1.1 (BSL/BUSL-1.1)
 
 ## Commands
 
@@ -127,7 +127,9 @@ If you find MyIntern helpful, consider supporting development:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE)
+Business Source License 1.1 - see [LICENSE](LICENSE)
+
+Free for non-commercial use. Commercial use requires a license. See [LICENSE](LICENSE) for details.
 
 ---
 

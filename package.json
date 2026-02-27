@@ -1,6 +1,6 @@
 {
   "name": "myintern",
-  "version": "1.2.0",
+  "version": "1.2.3",
   "description": "Your AI Junior Developer for Java/Spring Boot Projects - Production-ready with Guardrails, Multi-Repo Support, and Enterprise Security",
   "main": "dist/index.js",
   "bin": {
@@ -37,7 +37,7 @@
     "autonomous-agent"
   ],
   "author": "Prasols",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "BUSL-1.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/myinterndev/myintern.git"
