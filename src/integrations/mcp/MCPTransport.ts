@@ -1,6 +1,6 @@
-import { spawn, ChildProcessByStdio } from 'child_process';
-import type { Readable, Writable } from 'stream';
-import * as net from 'net';
+import { spawn, ChildProcessByStdio } from 'node:child_process';
+import type { Readable, Writable } from 'node:stream';
+import * as net from 'node:net';
 
 export interface MCPTransport {
   connect(): Promise<void>;
@@ -35,7 +35,6 @@ export class StdioTransport implements MCPTransport {
 
     this.process.on('error', (err) => {
       // Surface unexpected process errors to stderr; individual calls handle their own failures.
-      // eslint-disable-next-line no-console
       console.error(`GitHub MCP stdio process error: ${err.message}`);
     });
   }

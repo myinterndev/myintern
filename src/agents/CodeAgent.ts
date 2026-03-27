@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { Agent } from '../core/Agent';
 import { ConfigManager, AgentConfig } from '../core/ConfigManager';
 import { SpecParser } from '../core/SpecParser';
-import { SpecOrchestrator } from '../core/SpecOrchestrator';
+import { SpecOrchestrator, SpecGroup } from '../core/SpecOrchestrator';
 import { ContextBuilder } from '../core/ContextBuilder';
 import { ContextFileLoader } from '../core/ContextFileLoader';
 import { SafetyRules } from '../core/SafetyRules';
@@ -234,16 +234,17 @@ export class CodeAgent extends Agent {
 
       console.log(chalk.green(`\n✨ Batch processing complete!\n`));
 
-    } catch (error: any) {
-      console.log(chalk.red(`\n❌ Batch processing error: ${error.message}\n`));
-      this.log(`Batch processing error: ${error.message}`, 'error');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(chalk.red(`\n❌ Batch processing error: ${message}\n`));
+      this.log(`Batch processing error: ${message}`, 'error');
     }
   }
 
   /**
    * Process a group of specs (specs within same Jira ticket run sequentially)
    */
-  private async processSpecGroup(group: any): Promise<void> {
+  private async processSpecGroup(group: SpecGroup): Promise<void> {
     const groupLabel = group.jiraTicket.startsWith('no-jira-')
       ? path.basename(group.specs[0].filePath)
       : group.jiraTicket;

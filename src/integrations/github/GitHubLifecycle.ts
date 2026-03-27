@@ -52,7 +52,6 @@ export class GitHubLifecycle {
       labels: this.config.pr.labels || ['myintern-generated']
     });
 
-    // eslint-disable-next-line no-console
     console.log(chalk.green(`   ✓ PR created via GitHub MCP: ${pr.url}`));
 
     // Wait for checks if configured
@@ -74,7 +73,6 @@ export class GitHubLifecycle {
       await this.client.mergePullRequest(pr.number, {
         merge_method: 'squash'
       });
-      // eslint-disable-next-line no-console
       console.log(chalk.green(`   ✓ PR auto-merged via GitHub MCP: #${pr.number}`));
     }
 
@@ -84,7 +82,7 @@ export class GitHubLifecycle {
   private renderTemplate(template: string, vars: Record<string, any>): string {
     let rendered = template;
     for (const [key, value] of Object.entries(vars)) {
-      rendered = rendered.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
+      rendered = rendered.replaceAll(new RegExp(`{{${key}}}`, 'g'), String(value));
     }
     return rendered;
   }

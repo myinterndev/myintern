@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { AuditLogger, AuditEntry } from '../../core/AuditLogger';
+import { AuditLogger } from '../../core/AuditLogger';
 
 interface AuditOptions {
   spec?: string;

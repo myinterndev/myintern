@@ -106,8 +106,7 @@ export class CIEnvironment {
     }
 
     // Strip ANSI color codes
-    // eslint-disable-next-line no-control-regex
-    return text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+    return text.replaceAll(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
   }
 
   /**
