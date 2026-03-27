@@ -13,11 +13,11 @@ MyIntern is a compliance-first AI coding agent for Java and Spring Boot teams. I
 **Key Features:**
 - 🚀 Generate Spring Boot code from specs
 - ✅ Auto-generate JUnit tests with 80%+ coverage
-- 🔒 PII/PHI detection (FREE: warnings, PRO: blocking)
-- 🛡️ ReviewAgent code quality gates (PRO)
-- 🛠️ Auto-fix build failures (PRO)
-- 📋 Jira MCP integration (PRO)
-- 🔍 Immutable audit trail for compliance (PRO)
+- 🔒 PII/PHI detection and blocking
+- 🛡️ ReviewAgent code quality gates
+- 🛠️ Auto-fix build failures
+- 📋 Jira MCP integration
+- 🔍 Immutable audit trail for compliance
 
 ## Quick Start
 
@@ -65,8 +65,8 @@ MyIntern detects the spec, analyzes your codebase patterns, generates code, and 
 **Specialized Agents:**
 - 🤖 **Code Agent** - Generates Spring Boot code from specs (FREE)
 - ✅ **Test Agent** - Creates JUnit tests (FREE)
-- 🏗️ **Build Agent** - Auto-fix build failures (PRO)
-- 🔍 **Review Agent** - Code quality gates & audits (PRO)
+- 🏗️ **Build Agent** 
+- 🔍 **Review Agent** - Code quality gates & audits
 
 **Spring Boot Expertise:**
 - Spring Data JPA, Security, Cloud
@@ -126,28 +126,20 @@ If you find MyIntern helpful, consider supporting development:
 - **GitHub Issues:** [github.com/myinterndev/myintern/issues](https://github.com/myinterndev/myintern/issues)
 - **Contributing:** We welcome PRs! Areas we need help: Gradle support, Kotlin support, additional Spring patterns
 
-## Pricing
+## Usage Model
 
-**FREE Tier - Prototyping:**
+**Open source and free:**
 - Full code generation with BYOK
-- PII/PHI detection (warnings only)
+- PII/PHI detection and blocking
 - Community support
 
-**PRO Tier - Production Ready ($20/mo or $200/yr):**
 - PII/PHI blocking (not just warnings)
-- ReviewAgent code quality gates
-- Auto-fix build failures
-- Multi-repo support
-- GitHub/Jira MCP integrations
-- Audit trail for HIPAA/PCI-DSS compliance
 
-[View full pricing →](https://www.myintern.dev/#pricing)
+See docs for full feature details: https://www.myintern.dev/docs
 
 ## License
 
 Apache License 2.0 - see [LICENSE](LICENSE)
-
-PRO features require a valid license key. See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL) for details.
 
 ---
 

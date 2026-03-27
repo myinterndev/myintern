@@ -1,6 +1,6 @@
 {
   "name": "myintern",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Compliance-first AI coding agent that fixes production errors while you sleep — self-hosted, BYOK, with audit trails",
   "main": "dist/index.js",
   "bin": {

@@ -546,7 +546,7 @@ export class CodeAgent extends Agent {
 - Community feedback
 
 **Month 3:** Monetization
-- Pro tier with GitHub integration
+- GitHub integration
 - Landing page
 - Stripe integration
 

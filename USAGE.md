@@ -17,7 +17,7 @@ MyIntern is a compliance-first AI coding agent for Java/Spring Boot teams. It wa
 - ✅ Generates JUnit tests automatically
 - ✅ Auto-fixes compilation errors (max 3 retries)
 - ✅ Creates feature branches (never commits to main)
-- ✅ Free with Claude Pro/Max subscription, or BYOK (Bring Your Own Key)
+- ✅ Free and open source with Claude CLI or BYOK (Bring Your Own Key)
 - ✅ **NEW v1.1:** Zero-setup code review (`myintern review`) - audit any codebase instantly
 - ✅ **NEW v1.1:** Rollback support - safely undo any changes with git integration
 - ✅ **NEW v1.1:** Dry-run preview - see changes before applying them
@@ -25,7 +25,7 @@ MyIntern is a compliance-first AI coding agent for Java/Spring Boot teams. It wa
 - ✅ **NEW v1.1:** Spring Boot intelligence - auto-detects 2.x vs 3.x, correct imports
 - ✅ **NEW v1.1:** Feedback loop - learns from your code reviews to improve
 - ✅ **FREE:** PII/PHI detection (warnings only) - catch issues early
-- ✅ **PRO:** ReviewAgent + PII/PHI blocking + auto-fix - ship safely to production
+- ✅ **Included:** ReviewAgent + PII/PHI blocking + auto-fix - ship safely to production
 - ✅ **NEW v1.2:** Multi-repo support - monorepo/microservices context awareness
 - ✅ **NEW v1.2:** Context loading - auto-loads CLAUDE.md, .cursorrules, etc.
 - ✅ **NEW v1.2:** Parallel execution - conflict-aware parallel spec processing
@@ -33,7 +33,7 @@ MyIntern is a compliance-first AI coding agent for Java/Spring Boot teams. It wa
 - ✅ **NEW v1.2:** Immutable audit trail - full traceability for compliance (HIPAA/PCI-DSS)
 
 Jira MCP integration - fetch tickets and auto-create specs
-- ✅ **NEW v1.3:** Server-side license validation - enterprise-grade security for PRO features
+- ✅ **NEW v1.3:** Server-side license validation - enterprise-grade security for all features
 
 ---
 
@@ -41,13 +41,13 @@ Jira MCP integration - fetch tickets and auto-create specs
 
 MyIntern offers two tiers:
 
-### FREE Tier
+### Base Mode
 - Basic code generation
 - Spec watching
 - Guardrails detection (warnings only)
 - Multi-language support
 
-### PRO Tier ($20/month)
+### Included Tier ($20/month)
 - **Server-validated features** (can't be bypassed):
   - **GitHub MCP** - Auto PR creation, merging
   - **CI/CD Mode** - Batch processing, JSON output
@@ -60,11 +60,11 @@ MyIntern offers two tiers:
 - Audit trail
 - Compliance reporting
 
-**Security**: PRO features use **dual-layer validation**:
+**Security**: all features use **dual-layer validation**:
 1. **Client-side** - Fast, works offline
 2. **Server-side** - Validates against Stripe, prevents bypass
 
-Get PRO at: https://myintern.dev/pricing
+All features are now free and open source.
 
 ---
 
@@ -1083,7 +1083,7 @@ Before generating code, MyIntern warns if you have uncommitted changes:
 
 MyIntern includes **guardrails** for sensitive data protection:
 - **FREE:** PII/PHI detection with warnings (catch issues before they happen)
-- **PRO:** PII/PHI blocking + compliance audit trail (HIPAA/PCI-DSS ready)
+- **Included:** PII/PHI blocking + compliance audit trail (HIPAA/PCI-DSS ready)
 
 ### What Are Guardrails?
 
@@ -1092,8 +1092,8 @@ Before sending code to AI, MyIntern scans for:
 - **Protected Health Information (PHI)** - Medical records (HIPAA)
 - **Credentials** - API keys, passwords, private keys
 
-**FREE tier:** Shows warnings, code still sent to LLM (risky for production)
-**PRO tier:** Blocks code from LLM, halts execution (safe for production)
+**base mode:** Shows warnings, code still sent to LLM (risky for production)
+**included tier:** Blocks code from LLM, halts execution (safe for production)
 
 ### Detection Categories
 
@@ -3324,7 +3324,7 @@ This repo has 15 feedback entries (12 positive, 3 negative).
 **✅ v1.0 Core Features (Complete):**
 - Java/Spring Boot support (Maven/Gradle)
 - Code + Test + Build agents
-- Free with Claude Pro/Max, or BYOK (Anthropic/OpenAI/Bedrock)
+- Free and open source with Claude CLI or BYOK (Anthropic/OpenAI/Bedrock)
 - Auto-fix retry logic (max 3 attempts)
 - Safety rules (protected branches, no file deletion)
 

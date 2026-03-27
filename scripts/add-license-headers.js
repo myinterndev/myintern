@@ -25,7 +25,7 @@ const LICENSE_HEADER = `/**
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * PRO features require a valid license key from https://myintern.dev
+ * All features are open source and free to use
  */
 
 `;

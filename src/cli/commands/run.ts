@@ -182,7 +182,7 @@ export async function runCommand(task: string | undefined, options: any) {
   if (auth.provider === 'none') {
     console.log(chalk.red('\n❌ No authentication found — authentication required'));
     console.log(chalk.yellow('\nPlease set up authentication using one of these methods:\n'));
-    console.log(chalk.cyan('Option 1: Claude Pro/Max Users (Recommended)'));
+    console.log(chalk.cyan('Option 1: Claude CLI Users (Recommended)'));
     console.log('  Install Claude Code CLI and authenticate:');
     console.log('  $ brew install anthropics/claude/claude');
     console.log('  $ claude auth login\n');
