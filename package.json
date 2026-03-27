@@ -24,7 +24,7 @@
     "test:e2e": "npm run build && tests/e2e/test-runner.sh",
     "test:generate": "ts-node scripts/generate-tests.ts",
     "test:all": "npm test && npm run test:e2e",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint",
     "format": "prettier --write \"src/**/*.ts\"",
     "pack:test": "npm run build:production && npm pack --dry-run"
   },
