@@ -1,0 +1,80 @@
+# Source code (keep private, publish only compiled dist/)
+src/
+*.ts
+!*.d.ts
+tsconfig.json
+tsconfig.*.json
+
+# Development files
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Tests
+tests/
+__tests__/
+*.test.ts
+*.spec.ts
+*.test.js
+*.spec.js
+coverage/
+jest.config.js
+jest.config.ts
+
+# Development documentation (keep internal)
+docs/development/
+docs/architecture/
+docs/internal/
+CONTRIBUTING.md
+DEVELOPMENT.md
+
+# Build artifacts we don't want to publish
+*.tsbuildinfo
+.eslintcache
+
+# Environment and local config
+.env
+.env.*
+.myintern/
+
+# CI/CD configs
+.github/
+.gitlab-ci.yml
+.circleci/
+.travis.yml
+
+# Scripts for development only
+scripts/
+tools/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Package manager files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+*.md
+
+# Keep these (explicitly NOT ignored):
+# dist/          - compiled output (THIS IS WHAT WE PUBLISH)
+# templates/     - needed for code generation
+# docs/*.md      - public user-facing docs
+# examples/      - usage examples
+# README.md      - public readme
+# LICENSE        - legal requirements

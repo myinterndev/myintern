@@ -49,7 +49,10 @@ export class SpecOrchestrator {
   private readonly contextFile: string;
   private readonly parser: SpecParser;
 
-  constructor(private repoPath: string) {
+  constructor(
+    private repoPath: string,
+    private config?: import('./ConfigManager').AgentConfig
+  ) {
     this.contextDir = path.join(repoPath, '.myintern', '.context');
     this.contextFile = path.join(this.contextDir, 'global-context.json');
     this.parser = new SpecParser(); // Reuse single parser instance with cache
@@ -562,5 +565,176 @@ ${context.context}
     }
 
     return conflicts;
+  }
+
+  /**
+   * Execute batch of specs in CI/CD mode
+   * NEW in v1.3
+   *
+   * Processes multiple specs with parallel execution, conflict detection,
+   * and structured output for CI integration.
+   */
+  async executeBatch(options: {
+    specPaths: string[];
+    maxParallel: number;
+    timeout?: number;
+    failFast?: boolean;
+    ciMode: boolean;
+    outputFormatter?: any; // CIOutputFormatter
+    auditWriter?: any; // CIAuditWriter
+  }): Promise<Array<{
+    spec: string;
+    status: 'success' | 'failed' | 'skipped';
+    duration_ms: number;
+    error?: string;
+    pr?: { url: string; number: number };
+    files_generated?: string[];
+  }>> {
+    const startTime = Date.now();
+    const results: Array<{
+      spec: string;
+      status: 'success' | 'failed' | 'skipped';
+      duration_ms: number;
+      error?: string;
+      pr?: { url: string; number: number };
+      files_generated?: string[];
+    }> = [];
+
+    // Parse all specs
+    const specs = options.specPaths.map(p => this.parser.parse(p));
+
+    // Create execution plan using existing conflict detection
+    const plan = await this.createExecutionPlan(specs, options.maxParallel);
+
+    // Process parallel groups first
+    for (const batch of plan.parallelGroups) {
+      const batchSpecs = batch.flatMap(g => g.specs);
+
+      // Execute specs in parallel (up to maxParallel)
+      const batchPromises = batchSpecs.slice(0, options.maxParallel).map(async (spec) => {
+        return this.executeSpec(spec, options);
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+
+      // Check fail-fast
+      if (options.failFast && batchResults.some(r => r.status === 'failed')) {
+        break;
+      }
+    }
+
+    // Process sequential groups (conflicting specs run one at a time)
+    for (const group of plan.sequentialGroups) {
+      for (const spec of group.specs) {
+        const result = await this.executeSpec(spec, options);
+        results.push(result);
+
+        // Check fail-fast
+        if (options.failFast && result.status === 'failed') {
+          break;
+        }
+      }
+
+      if (options.failFast && results.some(r => r.status === 'failed')) {
+        break;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Execute a single spec
+   * Helper for executeBatch()
+   */
+  private async executeSpec(
+    spec: SpecFile,
+    options: {
+      timeout?: number;
+      ciMode: boolean;
+      outputFormatter?: any;
+      auditWriter?: any;
+    }
+  ): Promise<{
+    spec: string;
+    status: 'success' | 'failed' | 'skipped';
+    duration_ms: number;
+    error?: string;
+    pr?: { url: string; number: number };
+    files_generated?: string[];
+  }> {
+    const specName = path.basename(spec.filePath);
+    const startTime = Date.now();
+
+    // Emit spec start event if in CI mode
+    if (options.outputFormatter) {
+      options.outputFormatter.emitSpecStart(specName);
+    }
+
+    try {
+      // Import CodeAgent dynamically to avoid circular dependencies
+      const { CodeAgent } = await import('../agents/CodeAgent');
+      const agent = new CodeAgent();
+
+      // Process spec using existing CodeAgent
+      await agent.processSpecsOnce([spec.filePath]);
+
+      // Read execution log to get result
+      const logsFile = path.join(this.repoPath, '.myintern', 'logs', 'executions.json');
+      let executionStatus = 'success';
+      let filesGenerated: string[] = [];
+
+      if (fs.existsSync(logsFile)) {
+        const content = fs.readFileSync(logsFile, 'utf-8');
+        let logsData: { executions: any[] } = { executions: [] };
+        try {
+          logsData = JSON.parse(content);
+          if (Array.isArray(logsData)) {
+            logsData = { executions: logsData };
+          }
+        } catch {
+          logsData = { executions: [] };
+        }
+
+        const execution = (logsData.executions || []).find((e: any) => e.spec === specName);
+        if (execution) {
+          executionStatus = execution.status || 'success';
+          filesGenerated = execution.generated_files || [];
+        }
+      }
+
+      const duration = Date.now() - startTime;
+
+      const result = {
+        spec: specName,
+        status: executionStatus as 'success' | 'failed',
+        duration_ms: duration,
+        files_generated: filesGenerated,
+      };
+
+      // Emit completion event
+      if (options.outputFormatter) {
+        options.outputFormatter.emitSpecComplete(result);
+      }
+
+      return result;
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+
+      const result = {
+        spec: specName,
+        status: 'failed' as const,
+        duration_ms: duration,
+        error: error.message,
+      };
+
+      // Emit completion event
+      if (options.outputFormatter) {
+        options.outputFormatter.emitSpecComplete(result);
+      }
+
+      return result;
+    }
   }
 }

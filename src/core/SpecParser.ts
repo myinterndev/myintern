@@ -79,14 +79,27 @@ export class SpecParser {
 
     // Extract description section (renamed from Context)
     const descriptionMatch = content.match(/##\s*Description\s*\n([\s\S]*?)(?=\n##|$)/i);
-    const description = descriptionMatch ? descriptionMatch[1].trim() : '';
+    let description = descriptionMatch ? descriptionMatch[1].trim() : '';
 
     // Fallback to old Context format for backward compatibility
     if (!description) {
       const contextMatch = content.match(/##\s*Context\s*\n([\s\S]*?)(?=\n##|$)/i);
       const context = contextMatch ? contextMatch[1].trim() : '';
 
-      return this.parseLegacyFormat(specFilePath, fileName, content, title, type, priority, context);
+      if (context) {
+        return this.parseLegacyFormat(specFilePath, fileName, content, title, type, priority, context);
+      }
+
+      // Fallback: extract body text between metadata and first ## section
+      // This handles specs where description is inline without a section header
+      const bodyMatch = content.match(/(?:\*\*Priority:\*\*[^\n]*\n)([\s\S]*?)(?=\n##|$)/i);
+      if (bodyMatch) {
+        description = bodyMatch[1].trim();
+      }
+
+      if (!description) {
+        return this.parseLegacyFormat(specFilePath, fileName, content, title, type, priority, '');
+      }
     }
 
     // Extract acceptance criteria

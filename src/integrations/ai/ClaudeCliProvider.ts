@@ -24,6 +24,11 @@ export class ClaudeCliProvider implements AIProvider {
    * Check if Claude CLI is installed and authenticated
    */
   static async isAvailable(): Promise<boolean> {
+    // Allow tests to disable CLI auth detection
+    if (process.env.MYINTERN_SKIP_CLI_AUTH === 'true') {
+      return false;
+    }
+
     try {
       const { stdout, stderr } = await execAsync('which claude');
       if (!stdout.trim()) {

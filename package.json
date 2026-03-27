@@ -1,7 +1,7 @@
 {
   "name": "myintern",
-  "version": "1.2.3",
-  "description": "Your AI Junior Developer for Java/Spring Boot Projects - Production-ready with Guardrails, Multi-Repo Support, and Enterprise Security",
+  "version": "1.3.2",
+  "description": "Compliance-first AI coding agent that fixes production errors while you sleep — self-hosted, BYOK, with audit trails",
   "main": "dist/index.js",
   "bin": {
     "myintern": "dist/cli/index.js"
@@ -9,13 +9,15 @@
   "files": [
     "dist/**/*",
     "templates/**/*",
-    "docs/**/*",
-    "examples/**/*",
-    "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/cli/index.js",
+    "build:production": "npm run clean && npm run build && npm run add-license-headers && npm run verify-build",
+    "clean": "rm -rf dist/",
+    "add-license-headers": "node scripts/add-license-headers.js",
+    "verify-build": "node scripts/verify-build.js",
+    "prepublishOnly": "npm run build:production",
     "dev": "ts-node src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "test": "jest",
@@ -23,7 +25,8 @@
     "test:generate": "ts-node scripts/generate-tests.ts",
     "test:all": "npm test && npm run test:e2e",
     "lint": "eslint src --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "pack:test": "npm run build:production && npm pack --dry-run"
   },
   "keywords": [
     "ai",
@@ -33,27 +36,31 @@
     "developer",
     "automation",
     "code-generation",
-    "junior-developer",
-    "autonomous-agent"
+    "compliance-first",
+    "production-monitoring",
+    "self-hosted",
+    "hipaa"
   ],
   "author": "Prasols",
-  "license": "BUSL-1.1",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/myinterndev/myintern.git"
+    "url": "https://github.com/myinterndev/myintern"
   },
   "bugs": {
-    "url": "https://github.com/myinterndev/myintern/issues"
+    "url": "https://myintern.dev/support"
   },
-  "homepage": "https://github.com/myinterndev/myintern#readme",
+  "homepage": "https://myintern.dev",
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
     "@aws-sdk/client-bedrock-runtime": "^3.995.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1003.0",
     "@aws-sdk/credential-providers": "^3.995.0",
     "@octokit/rest": "^20.0.2",
+    "better-sqlite3": "^12.6.2",
     "chalk": "^5.3.0",
     "chokidar": "^3.6.0",
     "commander": "^12.0.0",
@@ -66,6 +73,7 @@
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/inquirer": "^9.0.7",
     "@types/jest": "^29.5.11",
     "@types/js-yaml": "^4.0.9",

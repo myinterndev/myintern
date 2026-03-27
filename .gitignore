@@ -9,6 +9,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# npm pack artifacts
+*.tgz
+
 # IDE
 .vscode/
 .idea/
@@ -25,6 +28,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# npm credentials (NEVER COMMIT)
+.npmrc
+
 # MyIntern local data
 .myintern/
 
@@ -37,6 +43,6 @@ logs/
 *.log
 
 
-*.md
+#*.md
 
 ./claude

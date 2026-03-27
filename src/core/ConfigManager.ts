@@ -65,7 +65,21 @@ export interface AgentConfig {
     code: boolean;
     test: boolean;
     build: boolean;
+    review?: boolean;
+    review_auto_fix?: boolean;
+    max_review_fix_rounds?: number;
     max_parallel?: number;  // Max parallel spec executions (default: 3)
+
+    // Pipeline configuration (NEW in v1.3)
+    pipeline?: {
+      stages?: string[];  // e.g., ['code', 'review', 'test', 'build', 'pr']
+      review_gate?: boolean;  // Block on review violations
+      review_auto_fix?: boolean;  // Auto-fix review violations
+      max_review_fix_rounds?: number;  // Max review → fix loops
+      on_max_rounds_exceeded?: 'fail' | 'warn_and_continue' | 'notify';
+      test_coverage_threshold?: number;  // Minimum test coverage %
+      build_retry_max?: number;  // Max build retries
+    };
   };
 
   // Watch configuration
@@ -152,18 +166,139 @@ export interface AgentConfig {
     max_failed_specs?: number;      // Stop watching after N consecutive failures (default: 5)
   };
 
+  // CI/CD configuration (NEW in v1.3)
+  ci?: {
+    auto_detect?: boolean;          // Auto-detect CI environment (default: true)
+    json_output?: boolean;          // JSON output to stdout in CI (default: true)
+    timeout_per_spec?: number;      // Timeout per spec in seconds (default: 300)
+    fail_fast?: boolean;            // Stop on first failure (default: false)
+    audit?: {
+      enabled?: boolean;            // Write audit JSONL in CI mode (default: true)
+      output_dir?: string;          // Audit log directory (default: .myintern/logs)
+      log_prompt_hashes?: boolean;  // Log SHA-256 of prompts (default: true)
+      log_token_counts?: boolean;   // Log token usage (default: true)
+    };
+    exit_codes?: {
+      success?: number;             // Exit code for success (default: 0)
+      failure?: number;             // Exit code for failure (default: 1)
+      config_error?: number;        // Exit code for config error (default: 2)
+      no_specs?: number;            // Exit code for no specs found (default: 3)
+      timeout?: number;             // Exit code for timeout (default: 4)
+      partial?: number;             // Exit code for partial success (default: 5)
+    };
+  };
+
   // MCP (Model Context Protocol) integrations (NEW in v1.2)
   mcp?: {
     servers?: {
       jira?: {
         enabled: boolean;             // Enable Jira MCP integration
         host: string;                 // Jira instance URL (e.g., "https://yourcompany.atlassian.net")
-        access_token: string;         // Jira API token (use env var: ${JIRA_ACCESS_TOKEN})
+        access_token?: string;        // Jira API token (use env var: ${JIRA_ACCESS_TOKEN})
         project_key?: string;         // Default project key (optional)
         issue_type?: string;          // Default issue type filter (optional)
         auto_sync?: boolean;          // Auto-sync tickets to specs (optional, default: false)
         sync_labels?: string[];       // Label filter for sync (optional)
       };
+
+      github?: {
+        enabled: boolean;                     // Enable GitHub MCP integration
+        transport: 'stdio' | 'sse' | 'tcp';   // Transport type
+
+        // stdio transport (recommended for official MCP server)
+        command?: string;
+        args?: string[];
+        env?: Record<string, string>;
+
+        // tcp / sse transport
+        host?: string;
+        port?: number;
+        access_token?: string;
+
+        pr?: {
+          base_branch?: string;
+          auto_create?: boolean;
+          auto_merge?: boolean;
+          draft?: boolean;
+          reviewers?: string[];
+          labels?: string[];
+          template?: string;
+        };
+
+        actions?: {
+          trigger_on_pr?: boolean;
+          wait_for_checks?: boolean;
+          check_timeout_ms?: number;
+          auto_fix_on_failure?: boolean;
+        };
+
+        reviews?: {
+          respond_to_comments?: boolean;
+          auto_resolve?: boolean;
+          max_review_rounds?: number;
+          on_max_rounds_exceeded?: 'fail_pr' | 'leave_open' | 'notify';
+        };
+
+        rate_limit?: {
+          max_requests_per_minute?: number;
+          retry_after_ms?: number;
+          shared_budget?: boolean;
+        };
+      };
+    };
+  };
+
+  // Runtime monitoring (NEW in Phase 1)
+  runtime?: {
+    enabled: boolean;
+    environment: 'production' | 'staging' | 'development';
+    phase: 1 | 2;
+    cloudwatch: {
+      enabled: boolean;
+      region: string;
+      logGroups: string[];
+      pollInterval: number;
+      errorPatterns: Array<{
+        pattern: string;
+        severity: 'critical' | 'high' | 'medium' | 'low';
+      }>;
+    };
+    deduplication: {
+      enabled: boolean;
+      window: string;
+      maxSpecsPerError: number;
+      cacheBackend: 'sqlite' | 'redis';
+      cachePath: string;
+    };
+    severityRules: {
+      critical: {
+        autoFix: boolean;
+        requireApproval: boolean;
+        maxPerDay: number;
+        createSpec?: boolean;
+      };
+      high: {
+        autoFix: boolean;
+        requireApproval: boolean;
+        maxPerDay: number;
+        createSpec?: boolean;
+      };
+      medium: {
+        autoFix: boolean;
+        requireApproval: boolean;
+        maxPerDay: number;
+        createSpec?: boolean;
+      };
+      low: {
+        autoFix: boolean;
+        requireApproval: boolean;
+        maxPerDay: number;
+        createSpec?: boolean;
+      };
+    };
+    rateLimiting: {
+      maxSpecsPerHour: number;
+      maxApiCallsPerHour: number;
     };
   };
 }
@@ -404,7 +539,10 @@ export class ConfigManager {
         code: true,
         test: true,
         build: true,
-        max_parallel: 3  // Max 3 specs in parallel by default
+        review: true,
+        max_parallel: 3,  // Max 3 specs in parallel by default
+        review_auto_fix: true,
+        max_review_fix_rounds: 2
       },
 
       watch: {
@@ -483,7 +621,7 @@ export class ConfigManager {
           jira: {
             enabled: false,                   // Enable when ready to use
             host: 'localhost',                // MCP server host
-            access_token: '${JIRA_ACCESS_TOKEN}', // Jira API token (use env var)
+            // access_token: '${JIRA_ACCESS_TOKEN}', // Uncomment and set when enabling Jira
             project_key: '',                  // Optional: default project
             auto_sync: false                  // Optional: auto-sync tickets
           }

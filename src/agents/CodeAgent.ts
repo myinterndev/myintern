@@ -19,6 +19,10 @@ import { RollbackManager } from '../core/RollbackManager';
 import { FeedbackLoop } from '../core/FeedbackLoop';
 import { SpringBootDetector } from '../core/SpringBootDetector';
 import { AuditLogger } from '../core/AuditLogger';
+import { ReviewAgent } from '../agents/ReviewAgent';
+import { PRManager } from '../integrations/git/PRManager';
+import { GitHubMCPClient, GitHubMCPConfig } from '../integrations/mcp/GitHubMCPClient';
+import { GitHubLifecycle } from '../integrations/github/GitHubLifecycle';
 
 /**
  * Code Agent - Java/Spring Boot Code Generation
@@ -63,6 +67,12 @@ export class CodeAgent extends Agent {
 
   private pendingSpecs: Set<string> = new Set();
   private processingTimer: NodeJS.Timeout | null = null;
+
+  /** Git config with defaults so minimal agent.yml (e.g. in tests) does not cause undefined access. */
+  private get gitConfig() {
+    const defaultGit = ConfigManager.getDefaultConfig().git;
+    return this.agentConfig.git ? { ...defaultGit, ...this.agentConfig.git } : defaultGit;
+  }
 
   async start(): Promise<void> {
     this.log('Starting Code Agent (Java/Spring Boot)...', 'info');
@@ -144,6 +154,28 @@ export class CodeAgent extends Agent {
     const specPaths = Array.from(this.pendingSpecs);
     this.pendingSpecs.clear();
 
+    await this.processSpecsInternal(specPaths);
+  }
+
+  /**
+   * Public entry point for one-off/batch spec processing (used by CLI run --spec/--all)
+   *
+   * This reuses the same conflict-aware execution plan as the watcher-based flow,
+   * but operates on an explicit list of spec file paths instead of the internal queue.
+   */
+  async processSpecsOnce(specPaths: string[]): Promise<void> {
+    if (!specPaths || specPaths.length === 0) {
+      return;
+    }
+
+    await this.processSpecsInternal(specPaths);
+  }
+
+  /**
+   * Core implementation for batch spec processing used by both the watcher
+   * debounce path and the explicit CLI-driven path.
+   */
+  private async processSpecsInternal(specPaths: string[]): Promise<void> {
     console.log(chalk.blue(`\n📦 Processing ${specPaths.length} spec file(s)...\n`));
 
     try {
@@ -282,7 +314,7 @@ export class CodeAgent extends Agent {
       }
 
       // Step 3: Safety checks
-      const safety = new SafetyRules(this.repoPath, this.agentConfig.git.protected_branches);
+      const safety = new SafetyRules(this.repoPath, this.gitConfig.protected_branches);
 
       await safety.warnIfDirty();
 
@@ -296,12 +328,12 @@ export class CodeAgent extends Agent {
       // Step 4: Ensure we're on a safe branch (config-driven)
       const suggestedBranchName = `${spec.type}-${fileName.replace('.md', '')}`;
       const workingBranch = await safety.ensureSafeBranch({
-        auto_branch: this.agentConfig.git.auto_branch,
-        branch_prefix: this.agentConfig.git.branch_prefix,
+        auto_branch: this.gitConfig.auto_branch,
+        branch_prefix: this.gitConfig.branch_prefix,
         suggested_name: suggestedBranchName
       });
 
-      if (this.agentConfig.git.auto_branch) {
+      if (this.gitConfig.auto_branch) {
         console.log(chalk.green(`   ✓ Working on branch: ${workingBranch}`));
       } else {
         console.log(chalk.green(`   ✓ Using current branch: ${workingBranch}`));
@@ -423,6 +455,56 @@ export class CodeAgent extends Agent {
       const recentChanges = this.rollbackManager.getRecentChanges(1);
       const changeId = recentChanges.length > 0 ? recentChanges[0].id : null;
 
+      // Optional review gate with basic feedback loop
+      if (this.agentConfig.agents.review) {
+        console.log(chalk.blue('\n   🔍 Reviewing codebase (ReviewAgent)...'));
+
+        const reviewAgent = new ReviewAgent(this.repoPath, this.aiProvider);
+        const maxRounds = this.agentConfig.agents.max_review_fix_rounds ?? 2;
+        const autoFix = this.agentConfig.agents.review_auto_fix !== false;
+
+        let round = 0;
+        let reviewResult = await reviewAgent.reviewCodebase({
+          focus: 'all',
+          severity: 'all'
+        });
+
+        console.log(chalk.gray(`   Review violations: ${reviewResult.summary.totalViolations}`));
+
+        while (autoFix && reviewResult.summary.totalViolations > 0 && round < maxRounds) {
+          round++;
+          console.log(chalk.blue(`\n   🔧 Auto-fixing review violations (round ${round}/${maxRounds})...`));
+          await reviewAgent.autoFix(reviewResult.violations);
+
+          reviewResult = await reviewAgent.reviewCodebase({
+            focus: 'all',
+            severity: 'all'
+          });
+
+          console.log(chalk.gray(`   Remaining review violations: ${reviewResult.summary.totalViolations}`));
+        }
+
+        if (reviewResult.summary.totalViolations > 0) {
+          console.log(chalk.red('\n   ⛔ Review gate failed: unresolved violations remain after auto-fix rounds'));
+          console.log(chalk.red('   Skipping build, tests, and PR creation for this spec.\n'));
+
+          this.saveLog({
+            timestamp: new Date().toISOString(),
+            spec: fileName,
+            branch: workingBranch,
+            status: 'failed',
+            files_changed: implementation.files.length,
+            build_result: 'skipped_due_to_review_violations',
+            review_violations: reviewResult.summary.totalViolations,
+            retry_count: 0
+          });
+
+          return;
+        }
+
+        console.log(chalk.green('   ✓ Review gate passed'));
+      }
+
       // Step 12: Build with retry
       if (this.agentConfig.agents.build) {
         console.log(chalk.blue('\n   🔨 Building project...'));
@@ -521,7 +603,7 @@ export class CodeAgent extends Agent {
         console.log(chalk.green('   ✓ Build successful'));
       }
 
-      // Step 10: Generate tests
+      // Step 13: Generate tests
       if (this.agentConfig.agents.test) {
         console.log(chalk.blue('\n   🧪 Generating tests...'));
 
@@ -536,7 +618,10 @@ export class CodeAgent extends Agent {
         }
       }
 
-      // Step 11: Summary
+      // Step 14: Create PR (if configured)
+      await this.createPullRequestIfConfigured(spec, workingBranch, implementation.files.length);
+
+      // Step 15: Summary
       console.log(chalk.green(`\n✨ Implementation complete!`));
       console.log(chalk.gray(`   Branch: ${workingBranch}`));
       console.log(chalk.gray(`   Files: ${implementation.files.length} created/modified`));
@@ -560,7 +645,7 @@ export class CodeAgent extends Agent {
 
       // Save to logs with failed status
       const fileName = path.basename(filePath);
-      const safety = new SafetyRules(this.repoPath, this.agentConfig.git.protected_branches);
+      const safety = new SafetyRules(this.repoPath, this.gitConfig.protected_branches);
       const currentBranch = await safety.getCurrentBranch();
 
       this.saveLog({
@@ -592,6 +677,34 @@ Validation Package: ${templateContext.validationPackage}
 Servlet Package: ${templateContext.servletPackage}
 
 CRITICAL: Use ${templateContext.useJakarta ? 'jakarta.*' : 'javax.*'} imports (NOT ${templateContext.useJakarta ? 'javax.*' : 'jakarta.*'})
+
+## Spring Boot Architecture Rules
+- Controllers: Thin HTTP layer only (@RestController, @RequestMapping). No business logic.
+- Services: @Service + @Transactional. All business logic lives here.
+- Repositories: Extend JpaRepository<T, ID>. Custom queries via @Query or method naming.
+- DTOs: Use Java Records for request/response. Never expose @Entity in API responses.
+- Validation: @Valid on controller params, Bean Validation annotations on DTOs.
+- Exceptions: Custom exceptions extend RuntimeException. Handle via @RestControllerAdvice.
+- Injection: Constructor injection only (use @RequiredArgsConstructor). NEVER use @Autowired field injection.
+${templateContext.useJakarta ? `
+## Spring Boot 3.x Specific
+- Security: Use SecurityFilterChain bean (WebSecurityConfigurerAdapter is REMOVED in 3.x)
+- Error responses: Use ProblemDetail (RFC 7807) for structured error responses
+- HTTP clients: Prefer @HttpExchange declarative clients over RestTemplate
+- Observability: Use Micrometer Observation API (@Observed) for tracing
+` : `
+## Spring Boot 2.x Specific
+- Security: Extend WebSecurityConfigurerAdapter for security config
+- HTTP clients: Use RestTemplate (blocking) or WebClient (reactive)
+- Error handling: @RestControllerAdvice with ResponseEntity
+`}
+## Anti-Patterns (NEVER do these)
+- No @Autowired field injection (use constructor injection)
+- No @AllArgsConstructor (use @RequiredArgsConstructor)
+- No business logic in controllers
+- No entity objects in API responses (use DTOs)
+- No ddl-auto: update in production configs
+- No System.out.println (use @Slf4j + log.info/debug/error)
 ` : ''}
 
 # Project Context
@@ -678,6 +791,63 @@ CRITICAL:
 `;
 
     return prompt;
+  }
+
+  /**
+   * Create a pull request for successful implementations when configured.
+   *
+   * Prefers GitHub MCP integration when enabled, otherwise falls back to gh CLI via PRManager.
+   */
+  private async createPullRequestIfConfigured(
+    spec: any,
+    workingBranch: string,
+    filesChanged: number
+  ): Promise<void> {
+    const githubMcp = this.agentConfig.mcp?.servers?.github as GitHubMCPConfig | undefined;
+
+    if (githubMcp?.enabled) {
+      try {
+        console.log(chalk.blue('\n   📤 Creating PR via GitHub MCP...'));
+        const client = new GitHubMCPClient(githubMcp);
+        const lifecycle = new GitHubLifecycle(client, githubMcp);
+
+        const result = await lifecycle.createAndMonitorPR({
+          specName: spec.filePath.split('/').pop() || 'unknown',
+          specTitle: spec.title,
+          branch: workingBranch,
+          filesChanged
+        });
+
+        if (result.pr) {
+          console.log(chalk.green(`   ✓ PR ready: ${result.pr.url}`));
+        } else {
+          console.log(chalk.gray('   PR creation skipped by GitHub MCP configuration'));
+        }
+      } catch (error: any) {
+        console.log(chalk.yellow(`   ⚠️  GitHub MCP PR creation failed: ${error.message}`));
+      }
+      return;
+    }
+
+    if (this.gitConfig.auto_pr) {
+      try {
+        console.log(chalk.blue('\n   📤 Creating PR via gh CLI...'));
+        const manager = new PRManager(this.repoPath, {
+          auto_pr: this.gitConfig.auto_pr,
+          pr_base_branch: this.gitConfig.pr_base_branch,
+          pr_template: this.gitConfig.pr_template
+        });
+
+        await manager.createPR({
+          spec,
+          branch: workingBranch,
+          filesChanged,
+          buildStatus: 'passed'
+        });
+      } catch (error: any) {
+        console.log(chalk.yellow(`   ⚠️  gh CLI PR creation failed: ${error.message}`));
+      }
+    }
   }
 
   /**

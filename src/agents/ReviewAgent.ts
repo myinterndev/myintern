@@ -6,6 +6,21 @@ import { AIProvider } from '../integrations/ai/AIProvider';
 import { LanguageDetector } from '../core/LanguageDetector';
 
 /**
+ * Review violation type (exported for AgentPipeline)
+ */
+export interface ReviewViolation {
+  id: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  category: string;
+  file: string;
+  line?: number;
+  description: string;
+  recommendation: string;
+  autoFixable: boolean;
+  fix?: string;
+}
+
+/**
  * ReviewAgent - Zero-setup codebase auditing
  * Scans any codebase and identifies code quality issues, security vulnerabilities,
  * and violations of best practices
@@ -118,10 +133,14 @@ export class ReviewAgent {
     const prompt = this.buildReviewPrompt(filePath, content, langConfig, focus);
 
     try {
-      const response = await this.aiProvider.generateCode(prompt);
+      // Use chat() instead of generateCode() since review returns violations JSON, not CodeImplementation
+      const responseText = await this.aiProvider.chat([
+        { role: 'user', content: prompt }
+      ]);
 
-      // Parse violations from response
-      const violations = this.parseViolations(response, filePath);
+      // Parse JSON from response (may be wrapped in markdown code fences)
+      const parsed = this.extractJSON(responseText);
+      const violations = this.parseViolations(parsed, filePath);
 
       return violations;
     } catch (error) {
@@ -183,6 +202,29 @@ export class ReviewAgent {
     prompt += `- Mark as autoFixable only if fix is straightforward\n`;
 
     return prompt;
+  }
+
+  /**
+   * Extract JSON object from a text response (handles markdown code fences)
+   */
+  private extractJSON(text: string): any {
+    // Try removing markdown code fences first
+    const defenced = text
+      .replace(/^```(?:json)?\s*\n?/m, '')
+      .replace(/\n?\s*```\s*$/m, '')
+      .trim();
+
+    try {
+      return JSON.parse(defenced);
+    } catch {
+      // Try extracting JSON object with regex
+      const objMatch = text.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        return JSON.parse(objMatch[0]);
+      }
+    }
+
+    return {};
   }
 
   /**
@@ -435,5 +477,39 @@ export class ReviewAgent {
     prompt += `\`\`\`\n`;
 
     return prompt;
+  }
+
+  /**
+   * Review specific files (used by AgentPipeline)
+   * NEW in v1.3
+   */
+  async reviewFiles(filePaths: string[]): Promise<{
+    violations: ReviewViolation[];
+    passed: boolean;
+  }> {
+    const violations: ReviewViolation[] = [];
+
+    // Detect language
+    const detector = new LanguageDetector(this.repoPath);
+    const detectedLang = detector.detectPrimary();
+
+    // Review each file
+    for (const filePath of filePaths) {
+      const absolutePath = path.isAbsolute(filePath)
+        ? filePath
+        : path.join(this.repoPath, filePath);
+
+      if (!fs.existsSync(absolutePath)) {
+        continue;
+      }
+
+      const fileViolations = await this.reviewFile(absolutePath, detectedLang, 'all');
+      violations.push(...fileViolations);
+    }
+
+    return {
+      violations,
+      passed: violations.length === 0,
+    };
   }
 }

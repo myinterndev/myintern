@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import chalk from 'chalk';
 import { initCommand } from './commands/init';
 import { startCommand } from './commands/start';
 import { stopCommand } from './commands/stop';
@@ -19,13 +18,15 @@ import { runCommand } from './commands/run';
 import { doctorCommand } from './commands/doctor';
 import { explainCommand } from './commands/explain';
 import { auditCommand } from './commands/audit';
+import { registerLicenseCommand } from './commands/license';
+import { daemonCommand } from './commands/daemon';
 
 const program = new Command();
 
 program
   .name('myintern')
   .description('Your AI Junior Developer for Java/Spring Boot Projects')
-  .version('1.2.3');
+  .version('1.3.0');
 
 program
   .command('init')
@@ -33,9 +34,14 @@ program
   .action(initCommand);
 
 program
-  .command('run <task>')
-  .description('Zero-config: Run a task immediately (auto-detects language, auth, context)')
-  .option('-y, --yes', 'Auto-approve changes without confirmation')
+  .command('run')
+  .description('Run a zero-config task or process specs (CI-friendly when using --spec/--all)')
+  .argument('[task]', 'Task to run in zero-config mode (e.g., Add GET /health endpoint)')
+  .option('-y, --yes', 'Auto-approve changes without confirmation (zero-config mode)')
+  .option('--spec <name>', 'Process a single spec file (e.g., spec-001 or spec-001.md)')
+  .option('--all', 'Process all specs in .myintern/specs (conflict-aware batch)')
+  .option('--ci', 'Run in CI/headless mode (non-interactive, JSON-friendly output)')
+  .option('--json', 'Output machine-readable JSON summary for spec runs')
   .action(runCommand);
 
 program
@@ -85,6 +91,7 @@ program
   .option('--focus <type>', 'Focus area: security, quality, performance, all', 'all')
   .option('--severity <level>', 'Minimum severity: critical, high, medium, low, all', 'all')
   .option('--auto-fix', 'Automatically fix issues')
+  .option('--json', 'Output results as JSON')
   .action(reviewCommand);
 
 program
@@ -115,6 +122,9 @@ program
 program.addCommand(importSpeckit);
 program.addCommand(guardrailsCommand);
 
+// License management
+registerLicenseCommand(program);
+
 program
   .command('doctor')
   .description('Validate environment setup (Java, Maven, API keys, git, config)')
@@ -141,5 +151,14 @@ program
   .option('--json', 'Output as raw JSON (machine-readable)')
   .option('--path', 'Print audit log file path and exit')
   .action(auditCommand);
+
+program
+  .command('daemon')
+  .description('Start/stop runtime monitoring daemon (Phase 1)')
+  .option('--runtime', 'Start runtime monitoring mode')
+  .option('--background', 'Run in background (NOT IMPLEMENTED - use nohup or pm2)')
+  .option('--stop', 'Stop running daemon')
+  .option('--status', 'Show daemon status')
+  .action(daemonCommand);
 
 program.parse();

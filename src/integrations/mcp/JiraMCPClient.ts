@@ -1,3 +1,4 @@
+import * as http from 'node:http';
 import * as net from 'net';
 
 /**
@@ -121,21 +122,100 @@ export class JiraMCPClient {
 
   /**
    * Send JSON-RPC 2.0 request to MCP server
+   * Tries HTTP POST first (most common), falls back to raw TCP
    */
   private async sendMCPRequest(
     method: string,
     params: any
   ): Promise<{ success: boolean; data?: any; error?: string }> {
+    const request = {
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method,
+      params
+    };
+
+    // Try HTTP first (most MCP servers are HTTP-based)
+    const httpResult = await this.sendHTTPRequest(request);
+    if (httpResult !== null) {
+      return httpResult;
+    }
+
+    // Fall back to raw TCP
+    console.log(`[MCP] HTTP request to ${this.config.host}:${this.config.port || 3000} failed, falling back to TCP`);
+    return this.sendTCPRequest(request);
+  }
+
+  /**
+   * Send JSON-RPC request via HTTP POST
+   */
+  private sendHTTPRequest(
+    request: any
+  ): Promise<{ success: boolean; data?: any; error?: string } | null> {
+    return new Promise((resolve) => {
+      const port = this.config.port || 3000;
+      const body = JSON.stringify(request);
+
+      const options: http.RequestOptions = {
+        hostname: this.config.host,
+        port,
+        path: '/',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        },
+        timeout: this.connectionTimeout
+      };
+
+      const req = http.request(options, (res) => {
+        let responseData = '';
+        res.on('data', (chunk: Buffer) => { responseData += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            const response = JSON.parse(responseData);
+            if (response.error) {
+              resolve({
+                success: false,
+                error: response.error.message || 'Unknown error'
+              });
+            } else {
+              resolve({
+                success: true,
+                data: response.result
+              });
+            }
+          } catch {
+            // Not valid JSON — HTTP server but wrong protocol
+            resolve(null);
+          }
+        });
+      });
+
+      req.on('error', () => {
+        // HTTP failed — try TCP fallback
+        resolve(null);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(null);
+      });
+
+      req.write(body);
+      req.end();
+    });
+  }
+
+  /**
+   * Send JSON-RPC request via raw TCP socket
+   */
+  private sendTCPRequest(
+    request: any
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
     return new Promise((resolve) => {
       const port = this.config.port || 3000;
       const socket = new net.Socket();
-
-      const request = {
-        jsonrpc: '2.0',
-        id: Date.now(),
-        method,
-        params
-      };
 
       let responseData = '';
 
@@ -171,7 +251,7 @@ export class JiraMCPClient {
               data: response.result
             });
           }
-        } catch (e) {
+        } catch {
           // Not a complete JSON yet, wait for more data
         }
       });

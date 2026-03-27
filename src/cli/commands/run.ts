@@ -3,40 +3,41 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { ConfigManager, AgentConfig } from '../../core/ConfigManager';
+import type { AgentConfig } from '../../core/ConfigManager';
 import { AIProviderFactory } from '../../integrations/ai/AIProviderFactory';
 import { ClaudeCliProvider } from '../../integrations/ai/ClaudeCliProvider';
 import { LanguageDetector } from '../../core/LanguageDetector';
 import { ContextFileLoader } from '../../core/ContextFileLoader';
 import { AuditLogger } from '../../core/AuditLogger';
+import { CodeAgent } from '../../agents/CodeAgent';
+import { SafetyRules } from '../../core/SafetyRules';
 
 const execAsync = promisify(exec);
 
 /**
  * Auto-detect authentication method
  * Priority:
- * 1. Claude CLI OAuth (if installed and authenticated)
- * 2. ANTHROPIC_API_KEY env var
- * 3. OPENAI_API_KEY env var
+ * 1. Explicit API key (ANTHROPIC_API_KEY or OPENAI_API_KEY) — user chose this intentionally
+ * 2. Claude CLI OAuth (if installed and authenticated)
+ * 3. Fallback to any available API key
  */
 async function autoDetectAuth(): Promise<{ provider: string; apiKey?: string }> {
-  // 1. Check for Claude CLI
-  const claudeAvailable = await ClaudeCliProvider.isAvailable();
-  if (claudeAvailable) {
-    console.log(chalk.green('✅ Detected Claude Code CLI with OAuth authentication'));
-    return { provider: 'claude-cli' };
-  }
-
-  // 2. Check for Anthropic API key
+  // 1. Explicit API keys take priority — user set these intentionally
   if (process.env.ANTHROPIC_API_KEY) {
     console.log(chalk.green('✅ Detected ANTHROPIC_API_KEY environment variable'));
     return { provider: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY };
   }
 
-  // 3. Check for OpenAI API key
   if (process.env.OPENAI_API_KEY) {
     console.log(chalk.green('✅ Detected OPENAI_API_KEY environment variable'));
     return { provider: 'openai', apiKey: process.env.OPENAI_API_KEY };
+  }
+
+  // 2. Fall back to Claude CLI OAuth
+  const claudeAvailable = await ClaudeCliProvider.isAvailable();
+  if (claudeAvailable) {
+    console.log(chalk.green('✅ Detected Claude Code CLI with OAuth authentication'));
+    return { provider: 'claude-cli' };
   }
 
   // No auth found
@@ -44,20 +45,142 @@ async function autoDetectAuth(): Promise<{ provider: string; apiKey?: string }> 
 }
 
 /**
- * Zero-config run command
- * Usage: myintern run "Add GET /health endpoint"
+ * Spec-driven run mode (single/batch specs, optional CI/JSON summary)
  */
-export async function runCommand(task: string, options: any) {
-  console.log(chalk.blue('🚀 MyIntern Zero-Config Mode\n'));
+async function runSpecsMode(repoPath: string, options: any): Promise<void> {
+  const specsDir = path.join(repoPath, '.myintern', 'specs');
 
+  if (!fs.existsSync(specsDir)) {
+    console.log(chalk.red('\n❌ Spec directory not found'));
+    console.log(chalk.gray(`   Expected: ${path.join('.myintern', 'specs')}\n`));
+    process.exit(1);
+  }
+
+  // Resolve spec paths
+  let specPaths: string[] = [];
+
+  if (options.all) {
+    const files = fs.readdirSync(specsDir)
+      .filter(f => f.endsWith('.md') && f.startsWith('spec-'))
+      .map(f => path.join(specsDir, f));
+
+    specPaths = files;
+  } else if (options.spec) {
+    const name = options.spec as string;
+    let fileName = name;
+
+    // Allow passing spec ID without extension or prefix
+    if (!fileName.endsWith('.md')) {
+      fileName += '.md';
+    }
+    if (!fileName.startsWith('spec-')) {
+      fileName = `spec-${fileName}`;
+    }
+
+    const candidate = path.join(specsDir, fileName);
+    if (!fs.existsSync(candidate)) {
+      console.log(chalk.red(`\n❌ Spec not found: ${fileName}`));
+      console.log(chalk.gray(`   Looked in: ${path.join('.myintern', 'specs')}\n`));
+      process.exit(1);
+    }
+
+    specPaths = [candidate];
+  }
+
+  if (specPaths.length === 0) {
+    console.log(chalk.yellow('\n⚠️  No specs to process\n'));
+    process.exit(3); // no_specs
+  }
+
+  // Use existing CodeAgent pipeline for spec execution
+  const codeAgent = new CodeAgent();
+  await codeAgent.processSpecsOnce(specPaths);
+
+  // Optional: JSON/CI-friendly summary based on executions.json
+  if (options.json || options.ci) {
+    const logsFile = path.join(repoPath, '.myintern', 'logs', 'executions.json');
+    if (!fs.existsSync(logsFile)) {
+      console.log(JSON.stringify({
+        event: 'batch_complete',
+        total_specs: specPaths.length,
+        succeeded: 0,
+        failed: 0,
+        failed_specs: [],
+        exit_code: 3
+      }));
+      process.exit(3);
+    }
+
+    const content = fs.readFileSync(logsFile, 'utf-8');
+    let logsData: { executions: any[] } = { executions: [] };
+    try {
+      logsData = JSON.parse(content);
+      if (Array.isArray(logsData)) {
+        logsData = { executions: logsData };
+      }
+    } catch {
+      logsData = { executions: [] };
+    }
+
+    const targetNames = new Set(specPaths.map(p => path.basename(p)));
+    const executions = (logsData.executions || []).filter((e: any) => targetNames.has(e.spec));
+
+    const succeeded = executions.filter((e: any) => e.status === 'success');
+    const failed = executions.filter((e: any) => e.status === 'failed');
+
+    const summary = {
+      event: 'batch_complete',
+      total_specs: specPaths.length,
+      succeeded: succeeded.length,
+      failed: failed.length,
+      failed_specs: failed.map((e: any) => e.spec),
+      exit_code: failed.length > 0 ? (succeeded.length > 0 ? 5 : 1) : 0
+    };
+
+    console.log(JSON.stringify(summary));
+
+    // Structured exit code for CI
+    if (summary.exit_code !== 0) {
+      process.exit(summary.exit_code);
+    }
+  }
+}
+
+/**
+ * Run command
+ *
+ * Modes:
+ * - Zero-config task mode: myintern run "Add GET /health endpoint"
+ * - Spec mode:            myintern run --spec spec-001
+ * - Batch spec mode:      myintern run --all
+ */
+export async function runCommand(task: string | undefined, options: any) {
   const repoPath = process.cwd();
+
+  // Spec-driven mode (uses existing CodeAgent + SpecOrchestrator pipeline)
+  if (options && (options.spec || options.all)) {
+    await runSpecsMode(repoPath, options);
+    return;
+  }
+
+  // Zero-config mode still requires a task string
+  if (!task) {
+    console.log(chalk.red('\n❌ Missing task for zero-config mode'));
+    console.log(chalk.gray('Usage:'));
+    console.log(chalk.cyan('  myintern run "Add GET /health endpoint"'));
+    console.log(chalk.cyan('  myintern run --spec spec-001           # process a spec file'));
+    console.log();
+    process.exit(1);
+  }
+
+  console.log(chalk.blue('🚀 MyIntern Zero-Config Mode\n'));
 
   // Step 1: Auto-detect authentication
   console.log(chalk.gray('Step 1/4: Detecting authentication...'));
   const auth = await autoDetectAuth();
 
   if (auth.provider === 'none') {
-    console.log(chalk.red('\n❌ No authentication found'));
+    console.log(chalk.red('\n❌ No authentication found — authentication required'));
     console.log(chalk.yellow('\nPlease set up authentication using one of these methods:\n'));
     console.log(chalk.cyan('Option 1: Claude Pro/Max Users (Recommended)'));
     console.log('  Install Claude Code CLI and authenticate:');
@@ -106,6 +229,20 @@ export async function runCommand(task: string, options: any) {
     });
   } else {
     console.log(chalk.yellow('⚠️  No context files found (CLAUDE.md, .cursorrules, etc.)'));
+  }
+
+  // Safety check: prevent code generation on protected branches
+  try {
+    const safetyRules = new SafetyRules(repoPath);
+    const { protected: isProtected, branch } = await safetyRules.isProtectedBranch();
+    if (isProtected) {
+      console.log(chalk.red(`\n❌ Cannot generate code on protected branch "${branch}"`));
+      console.log(chalk.yellow('   Create a feature branch first:'));
+      console.log(chalk.cyan(`   $ git checkout -b feature/my-task\n`));
+      process.exit(1);
+    }
+  } catch {
+    // Not a git repo or git not available — allow zero-config to proceed
   }
 
   // Step 4: Generate code

@@ -120,3 +120,37 @@
 2. No unused imports or variables
 3. Exception handling required for external calls
 4. All code must compile and pass tests before commit
+
+---
+
+## Spring Boot Version-Specific Rules
+
+### Spring Boot 3.x (jakarta.*)
+
+1. All Java EE imports use `jakarta.*` (NOT `javax.*`)
+   - `jakarta.persistence.*` for JPA
+   - `jakarta.validation.*` for Bean Validation
+   - `jakarta.servlet.*` for Servlet API
+2. Security: Use `SecurityFilterChain` bean (NOT `WebSecurityConfigurerAdapter` — removed in 3.x)
+   ```java
+   @Bean
+   SecurityFilterChain filterChain(HttpSecurity http) throws Exception { ... }
+   ```
+3. Error responses: Use `ProblemDetail` (RFC 7807) for structured errors
+4. HTTP clients: Prefer `@HttpExchange` declarative clients over `RestTemplate`
+5. Observability: Use Micrometer Observation API (`@Observed`)
+6. Java 17+ required (records, sealed classes, pattern matching encouraged)
+
+### Spring Boot 2.x (javax.*)
+
+1. All Java EE imports use `javax.*` (NOT `jakarta.*`)
+   - `javax.persistence.*` for JPA
+   - `javax.validation.*` for Bean Validation
+   - `javax.servlet.*` for Servlet API
+2. Security: Extend `WebSecurityConfigurerAdapter`
+   ```java
+   @Configuration
+   public class SecurityConfig extends WebSecurityConfigurerAdapter { ... }
+   ```
+3. HTTP clients: Use `RestTemplate` (blocking) or `WebClient` (reactive)
+4. Error handling: Use `@RestControllerAdvice` with `ResponseEntity`

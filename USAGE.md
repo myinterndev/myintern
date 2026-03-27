@@ -1,13 +1,13 @@
 # MyIntern Usage Guide - Java/Spring Boot Projects
 
-**Version:** 1.2
+**Version:** 1.3
 **Target:** Java developers working on Spring Boot projects with Maven or Gradle
 
 ---
 
 ## What is MyIntern?
 
-MyIntern is an autonomous AI coding agent that lives in your Java/Spring Boot repository. It watches for specification files, generates code following your team's standards, compiles, tests, and even fixes errors automatically.
+MyIntern is a compliance-first AI coding agent for Java/Spring Boot teams. It watches for specification files, generates code following your team's standards, compiles, tests, and enforces guardrails for PII/PHI/credentials — all running locally on your machine.
 
 **Key Features:**
 - ✅ Watches `.myintern/specs/` for feature requests
@@ -24,7 +24,8 @@ MyIntern is an autonomous AI coding agent that lives in your Java/Spring Boot re
 - ✅ **NEW v1.1:** GitHub Issues sync - convert issues to specs automatically
 - ✅ **NEW v1.1:** Spring Boot intelligence - auto-detects 2.x vs 3.x, correct imports
 - ✅ **NEW v1.1:** Feedback loop - learns from your code reviews to improve
-- ✅ **NEW v1.1:** Guardrails - PII/PHI/credential protection (HIPAA/PCI-DSS compliant)
+- ✅ **FREE:** PII/PHI detection (warnings only) - catch issues early
+- ✅ **PRO:** ReviewAgent + PII/PHI blocking + auto-fix - ship safely to production
 - ✅ **NEW v1.2:** Multi-repo support - monorepo/microservices context awareness
 - ✅ **NEW v1.2:** Context loading - auto-loads CLAUDE.md, .cursorrules, etc.
 - ✅ **NEW v1.2:** Parallel execution - conflict-aware parallel spec processing
@@ -32,6 +33,38 @@ MyIntern is an autonomous AI coding agent that lives in your Java/Spring Boot re
 - ✅ **NEW v1.2:** Immutable audit trail - full traceability for compliance (HIPAA/PCI-DSS)
 
 Jira MCP integration - fetch tickets and auto-create specs
+- ✅ **NEW v1.3:** Server-side license validation - enterprise-grade security for PRO features
+
+---
+
+## License Tiers & Security
+
+MyIntern offers two tiers:
+
+### FREE Tier
+- Basic code generation
+- Spec watching
+- Guardrails detection (warnings only)
+- Multi-language support
+
+### PRO Tier ($20/month)
+- **Server-validated features** (can't be bypassed):
+  - **GitHub MCP** - Auto PR creation, merging
+  - **CI/CD Mode** - Batch processing, JSON output
+  - **Agent Pipeline** - Auto-fix review violations
+  - **Jira MCP** - Ticket sync
+- Guardrails blocking (supports HIPAA/PCI-DSS workflows)
+- ReviewAgent with auto-fix
+- Build auto-fix
+- Multi-repo support
+- Audit trail
+- Compliance reporting
+
+**Security**: PRO features use **dual-layer validation**:
+1. **Client-side** - Fast, works offline
+2. **Server-side** - Validates against Stripe, prevents bypass
+
+Get PRO at: https://myintern.dev/pricing
 
 ---
 
@@ -1048,15 +1081,19 @@ Before generating code, MyIntern warns if you have uncommitted changes:
 
 ## Guardrails — Sensitive Data Protection (v1.1+)
 
-MyIntern includes **enterprise-grade guardrails** that prevent sensitive data (PII, PHI, credentials) from being sent to LLM providers. **Enabled by default** in v1.1+.
+MyIntern includes **guardrails** for sensitive data protection:
+- **FREE:** PII/PHI detection with warnings (catch issues before they happen)
+- **PRO:** PII/PHI blocking + compliance audit trail (HIPAA/PCI-DSS ready)
 
 ### What Are Guardrails?
 
-Before sending any code to the AI (Anthropic Claude, OpenAI, AWS Bedrock), MyIntern scans all files for:
+Before sending code to AI, MyIntern scans for:
 - **Personal Identifiable Information (PII)** - SSNs, credit cards, phone numbers
-- **Protected Health Information (PHI)** - Medical records (HIPAA compliance)
+- **Protected Health Information (PHI)** - Medical records (HIPAA)
 - **Credentials** - API keys, passwords, private keys
-- **Custom Patterns** - Your own regex patterns (e.g., employee IDs)
+
+**FREE tier:** Shows warnings, code still sent to LLM (risky for production)
+**PRO tier:** Blocks code from LLM, halts execution (safe for production)
 
 ### Detection Categories
 
@@ -1988,6 +2025,91 @@ myintern config show
 myintern config validate
 ```
 
+### CI/CD & Spec Run Usage (v1.3)
+
+MyIntern now supports **one-off spec runs** and **CI-friendly JSON output** without starting the long‑running watcher:
+
+```bash
+# Process a single spec once (no watcher)
+myintern run --spec spec-001
+
+# Process all specs in .myintern/specs (conflict-aware batches)
+myintern run --all
+
+# CI mode: JSON summary to stdout + structured exit codes
+myintern run --all --ci --json > results.json
+```
+
+**Exit codes (CI integration):**
+- `0` – all processed specs succeeded
+- `1` – all processed specs failed
+- `3` – no specs found / nothing to do
+- `5` – partial success (some succeeded, some failed)
+
+The JSON summary looks like:
+
+```json
+{
+  "event": "batch_complete",
+  "total_specs": 3,
+  "succeeded": 2,
+  "failed": 1,
+  "failed_specs": ["spec-003.md"],
+  "exit_code": 5
+}
+```
+
+Behind the scenes, spec‑driven runs use the same **Code → Review → Build → Test → PR** pipeline as `myintern start`:
+
+1. **Code Agent** parses the spec, builds context, and generates code.
+2. **(Optional) ReviewAgent** runs if `agents.review: true` in `agent.yml` to audit the codebase.
+3. **BuildAgent** compiles and tests the project with automatic retry/fix (max 3 attempts).
+4. **TestAgent** generates tests for the newly created/modified files (if `agents.test: true`).
+5. **PR creation** (optional) happens at the end of a successful run:
+   - Prefer **GitHub MCP** if configured (see below),
+   - Fallback to **gh CLI** via `PRManager` when `git.auto_pr: true`.
+
+#### GitHub MCP PR Creation (v1.3)
+
+Configure GitHub MCP in `.myintern/agent.yml` to have MyIntern open PRs automatically when a spec run completes successfully:
+
+```yaml
+mcp:
+  servers:
+    github:
+      enabled: true
+      transport: stdio
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+
+      pr:
+        base_branch: main
+        auto_create: true
+        auto_merge: false
+        draft: true
+        reviewers: []
+        labels: ["myintern-generated"]
+
+      actions:
+        trigger_on_pr: true
+        wait_for_checks: true
+        check_timeout_ms: 300000
+        auto_fix_on_failure: false
+
+      rate_limit:
+        max_requests_per_minute: 30
+        retry_after_ms: 60000
+        shared_budget: true
+```
+
+When this is enabled, a successful `myintern run --spec ...` / `--all` will:
+- Create a draft PR against `pr.base_branch`,
+- Optionally wait for GitHub Actions checks to pass,
+- Optionally auto‑merge if `pr.auto_merge: true`,
+- Log the PR URL in the console.
+
 ### Guardrails Commands (v1.1+)
 
 #### Scan for Sensitive Data
@@ -2554,7 +2676,7 @@ Always review before merging:
 git diff myintern/feature-SPEC_NAME
 ```
 
-Treat MyIntern like a junior developer - it's fast and follows instructions, but needs review.
+Treat MyIntern as an autonomous agent - it's fast and follows instructions, but always review the output.
 
 ### 4. Use Specific Specs
 

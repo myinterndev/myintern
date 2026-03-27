@@ -10,9 +10,12 @@ export async function reviewCommand(options: {
   focus?: 'security' | 'quality' | 'performance' | 'all';
   severity?: 'critical' | 'high' | 'medium' | 'low' | 'all';
   autoFix?: boolean;
+  json?: boolean;
 }): Promise<void> {
   try {
-    console.log(chalk.blue.bold('\n🔍 MyIntern Code Review\n'));
+    if (!options.json) {
+      console.log(chalk.blue.bold('\n🔍 MyIntern Code Review\n'));
+    }
 
     // Load config (zero-config mode supported)
     const configManager = new ConfigManager();
@@ -21,14 +24,21 @@ export async function reviewCommand(options: {
     try {
       config = configManager.load();
     } catch {
-      console.log(chalk.yellow('⚠️  No config found, using default AI provider'));
+      if (!options.json) {
+        console.log(chalk.yellow('⚠️  No config found, using default AI provider'));
+      }
       config = ConfigManager.getDefaultConfig();
 
       // Check for API key in environment
       if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
-        console.log(chalk.red('\n❌ No API key found'));
-        console.log(chalk.gray('   Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable'));
-        console.log(chalk.gray('   Or run: myintern init\n'));
+        const msg = 'No API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable, or run: myintern init';
+        if (options.json) {
+          console.log(JSON.stringify({ error: msg }));
+        } else {
+          console.log(chalk.red('\n❌ No API key found'));
+          console.log(chalk.gray('   Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable'));
+          console.log(chalk.gray('   Or run: myintern init\n'));
+        }
         process.exit(1);
       }
     }
@@ -47,28 +57,53 @@ export async function reviewCommand(options: {
     });
 
     if (!result.success) {
-      console.log(chalk.red('\n❌ Review failed\n'));
+      if (options.json) {
+        console.log(JSON.stringify({ success: false, violations: [], summary: result.summary }));
+      } else {
+        console.log(chalk.red('\n❌ Review failed\n'));
+      }
       process.exit(1);
     }
 
     // Auto-fix if requested
     if (options.autoFix && result.summary.autoFixable > 0) {
-      console.log(chalk.blue('\n🔧 Auto-fixing violations...\n'));
+      if (!options.json) {
+        console.log(chalk.blue('\n🔧 Auto-fixing violations...\n'));
+      }
 
       const autoFixable = result.violations.filter(v => v.autoFixable);
       const fixResult = await reviewAgent.autoFix(autoFixable);
 
-      if (fixResult.success) {
-        console.log(chalk.green(`\n✅ Auto-fix complete: ${fixResult.fixed} fixed\n`));
+      if (options.json) {
+        console.log(JSON.stringify({
+          success: true,
+          violations: result.violations,
+          summary: result.summary,
+          autoFix: { fixed: fixResult.fixed, failed: fixResult.failed }
+        }));
       } else {
-        console.log(chalk.yellow(`\n⚠️  Auto-fix partial: ${fixResult.fixed} fixed, ${fixResult.failed} failed\n`));
+        if (fixResult.success) {
+          console.log(chalk.green(`\n✅ Auto-fix complete: ${fixResult.fixed} fixed\n`));
+        } else {
+          console.log(chalk.yellow(`\n⚠️  Auto-fix partial: ${fixResult.fixed} fixed, ${fixResult.failed} failed\n`));
+        }
       }
+    } else if (options.json) {
+      console.log(JSON.stringify({
+        success: true,
+        violations: result.violations,
+        summary: result.summary
+      }));
     } else if (result.summary.autoFixable > 0) {
       console.log(chalk.blue('\n💡 Tip: Run with --auto-fix to automatically fix issues\n'));
     }
 
   } catch (error: any) {
-    console.log(chalk.red(`\n❌ Error: ${error.message}\n`));
+    if (options.json) {
+      console.log(JSON.stringify({ error: error.message }));
+    } else {
+      console.log(chalk.red(`\n❌ Error: ${error.message}\n`));
+    }
     process.exit(1);
   }
 }

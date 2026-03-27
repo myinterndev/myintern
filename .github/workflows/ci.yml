@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Verify production build
+        run: npm run build:production
+
+      - name: Verify license headers
+        run: |
+          if grep -r "Apache License" dist/ > /dev/null 2>&1; then
+            echo "License headers present"
+          else
+            echo "ERROR: License headers missing from dist/"
+            exit 1
+          fi
+
+      - name: Pack dry run
+        run: npm pack --dry-run

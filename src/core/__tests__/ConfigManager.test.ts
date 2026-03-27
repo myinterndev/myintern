@@ -202,17 +202,17 @@ describe('ConfigManager', () => {
       expect(result.errors.some((e: string) => e.includes('Invalid llm.provider'))).toBe(true);
     });
 
-    it('should fail for missing api_key on non-bedrock providers', () => {
+    it('should pass for missing api_key on anthropic (auto-discovery)', () => {
       const config = getValidBaseConfig();
-      delete config.llm.api_key;
+      delete config.llm.api_key;  // Anthropic allows auto-discovery from ANTHROPIC_API_KEY env var
       writeConfig(config);
 
       const manager = new ConfigManager(tempDir);
       manager.load();
       const result = manager.validate();
 
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Missing llm.api_key');
+      // Should pass - Anthropic SDK auto-discovers from ANTHROPIC_API_KEY or Claude CLI
+      expect(result.valid).toBe(true);
     });
 
     it('should fail for invalid model', () => {
